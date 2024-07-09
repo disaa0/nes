@@ -3,14 +3,15 @@
 #include <array>
 #include <cstdint>
 #include <functional>
-#include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace m6502 {
 
 using Byte = std::uint8_t;
 using Word = std::uint16_t;
+using Address = std::uint16_t;
 
 class CPU {
 public:
@@ -29,13 +30,71 @@ public:
     IndexedIndirect,
     IndirectIndexed
   };
+  enum class Operation {
+    ADC,
+    AND,
+    ASL,
+    BCC,
+    BCS,
+    BEQ,
+    BIT,
+    BMI,
+    BNE,
+    BPL,
+    BRK,
+    BVC,
+    BVS,
+    CLC,
+    CLD,
+    CLI,
+    CLV,
+    CMP,
+    CPX,
+    CPY,
+    DEC,
+    DEX,
+    DEY,
+    EOR,
+    INC,
+    INX,
+    INY,
+    JMP,
+    JSR,
+    LDA,
+    LDX,
+    LDY,
+    LSR,
+    NOP,
+    ORA,
+    PHA,
+    PHP,
+    PLA,
+    PLP,
+    ROL,
+    ROR,
+    RTI,
+    RTS,
+    SBC,
+    SEC,
+    SED,
+    SEI,
+    STA,
+    STX,
+    STY,
+    TAX,
+    TAY,
+    TSX,
+    TXA,
+    TXS,
+    TYA
+  };
 
   CPU() = default;
   ~CPU() = default;
 
   void reset();
   void step();
-  void run();
+  void run(std::vector<uint8_t> program, const char mode = 'b');
 
   AddressingMode detectAddressingMode(const std::string &instruction);
 
@@ -63,487 +122,121 @@ private:
 
     void reset() {
       PC = 0;
-      SP = 0;
-      A = 0;
-      X = 0;
-      Y = 0;
+      SP = 0xFF; // Initialize SP to 0xFF
+      A = X = Y = 0;
       P = {false, false, true, false, true, true, false, false};
     }
   };
 
   struct Instruction {
-    Word opcode;
-    std::string mnemonic;
+    Byte opcode;
+    Operation mnemonic;
     std::uint32_t cycles;
     AddressingMode mode;
 
-    Instruction(Word op, std::string mn, std::uint32_t cyc, AddressingMode m)
-        : opcode(op), mnemonic(std::move(mn)), cycles(cyc), mode(m) {}
+    Instruction(Byte op, Operation mn, std::uint32_t cyc, AddressingMode m)
+        : opcode(op), mnemonic(mn), cycles(cyc), mode(m) {}
 
-    // Default constructor
     Instruction()
         : opcode(0), mnemonic(), cycles(0), mode(AddressingMode::Implied) {}
   };
 
-  // Custom key type for translationTable_
   struct InstructionKey {
-    std::string mnemonic;
-    CPU::AddressingMode mode;
+    Operation mnemonic;
+    AddressingMode mode;
 
     bool operator==(const InstructionKey &other) const {
       return mnemonic == other.mnemonic && mode == other.mode;
     }
   };
 
-  // Custom hash function for InstructionKey
-  // struct InstructionKeyHash {
-  //   std::size_t operator()(const InstructionKey &key) const {
-  //     return std::hash<std::string>()(key.mnemonic) ^
-  //            (std::hash<int>()(static_cast<int>(key.mode)) << 1);
-  //   }
-  // };
   struct InstructionKeyHash {
     std::size_t operator()(const InstructionKey &key) const {
-      std::size_t h1 = std::hash<std::string>{}(key.mnemonic);
+      std::size_t h1 = std::hash<int>{}(static_cast<int>(key.mnemonic));
       std::size_t h2 = std::hash<int>{}(static_cast<int>(key.mode));
-      return h1 ^ (h2 << 1); // or use boost::hash_combine if available
+      return h1 ^ (h2 << 1); // or use boost::hash_combine
     }
   };
 
   Registers registers_;
   std::array<Byte, MAX_MEMORY> memory_;
-  std::unordered_map<Word, Instruction> opcodeTable_;
+  std::unordered_map<Byte, Instruction> opcodeTable_;
   std::unordered_map<InstructionKey, Instruction, InstructionKeyHash>
       translationTable_;
 
   // Memory Access
-  // Byte read(Word& address) const;
-  // Word readWord(Word& address);
   Byte read(Word address) const { return memory_[address]; }
+  void write(Word address, Byte value) { memory_[address] = value; }
 
-  // Word readWord(Word &address) {
-  //   Word lowByte = static_cast<Word>(read(address++));
-  //   Word highByte = static_cast<Word>(read(address++)) << 8;
-  //   return lowByte | highByte;
-  // }
+  // Cycle counting
+  std::uint64_t totalCycles = 0;
+  void addCycles(std::uint32_t cycles) { totalCycles += cycles; }
 
-  void write(Word address, Byte value);
-
-  void addCycles(std::uint32_t cycles) {
-    // Implement cycle counting logic here
-    // For example:
-    totalCycles += cycles;
-  }
-
-  // Operations
-  // Load/Store
-  void LDA();
-  void LDX();
-  void LDY();
-  void STA();
-  void STX();
-  void STY();
-  // Transfer
-  void TAX();
-  void TAY();
-  void TXA();
-  void TYA();
-  // Stack
-  void TSX();
-  void TXS();
-  void PHA();
-  void PHP();
-  void PLA();
-  void PLP();
-  // Logical
-  void AND();
-  void EOR();
-  void ORA();
-  void BIT();
-  // Arithmetic
-  void ADC();
-  void SBC();
-  void CMP();
-  void CPX();
-  void CPY();
-  // Increments/Decrements
-  void INC();
-  void INX();
-  void INY();
-  void DEC();
-  void DEX();
-  void DEY();
-  // Shifts
-  void ASL();
-  void LSR();
-  void ROL();
-  void ROR();
-  // Jumps and Calls
-  void JMP();
-  void JSR();
-  void RTS();
-  // Branches
-  void BCC();
-  void BCS();
-  void BEQ();
-  void BMI();
-  void BNE();
-  void BPL();
-  void BVC();
-  void BVS();
-  // Flags
-  void CLC();
-  void CLD();
-  void CLI();
-  void CLV();
-  void SEC();
-  void SED();
-  void SEI();
-  // System
-  void BRK();
-  void NOP();
-  void RTI();
+  // Combined operation functions
+  void LDA(const Instruction &instruction);
+  void LDX(const Instruction &instruction);
+  void LDY(const Instruction &instruction);
+  void STA(const Instruction &instruction);
+  void STX(const Instruction &instruction);
+  void STY(const Instruction &instruction);
+  void ADC(const Instruction &instruction);
+  void AND(const Instruction &instruction);
+  void ASL(const Instruction &instruction);
+  void BCC(const Instruction &instruction);
+  void BCS(const Instruction &instruction);
+  void BEQ(const Instruction &instruction);
+  void BIT(const Instruction &instruction);
+  void BMI(const Instruction &instruction);
+  void BNE(const Instruction &instruction);
+  void BPL(const Instruction &instruction);
+  void BRK(const Instruction &instruction);
+  void BVC(const Instruction &instruction);
+  void BVS(const Instruction &instruction);
+  void CLC(const Instruction &instruction);
+  void CLD(const Instruction &instruction);
+  void CLI(const Instruction &instruction);
+  void CLV(const Instruction &instruction);
+  void CMP(const Instruction &instruction);
+  void CPX(const Instruction &instruction);
+  void CPY(const Instruction &instruction);
+  void DEC(const Instruction &instruction);
+  void DEX(const Instruction &instruction);
+  void DEY(const Instruction &instruction);
+  void EOR(const Instruction &instruction);
+  void INC(const Instruction &instruction);
+  void INX(const Instruction &instruction);
+  void INY(const Instruction &instruction);
+  void JMP(const Instruction &instruction);
+  void JSR(const Instruction &instruction);
+  void LSR(const Instruction &instruction);
+  void NOP(const Instruction &instruction);
+  void ORA(const Instruction &instruction);
+  void PHA(const Instruction &instruction);
+  void PHP(const Instruction &instruction);
+  void PLA(const Instruction &instruction);
+  void PLP(const Instruction &instruction);
+  void ROL(const Instruction &instruction);
+  void ROR(const Instruction &instruction);
+  void RTI(const Instruction &instruction);
+  void RTS(const Instruction &instruction);
+  void SBC(const Instruction &instruction);
+  void SEC(const Instruction &instruction);
+  void SED(const Instruction &instruction);
+  void SEI(const Instruction &instruction);
+  void TAX(const Instruction &instruction);
+  void TAY(const Instruction &instruction);
+  void TSX(const Instruction &instruction);
+  void TXA(const Instruction &instruction);
+  void TXS(const Instruction &instruction);
+  void TYA(const Instruction &instruction);
 
   void initializeTables();
 
-  using ExecuteFunction = std::function<void(CPU &, const Instruction &)>;
-  std::unordered_map<std::string, ExecuteFunction> executeTable_;
-
-  void initializeExecuteTable();
-
-  static void executeLDA(CPU &cpu, const Instruction &instruction) {
-    cpu.LDA();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeLDX(CPU &cpu, const Instruction &instruction) {
-    cpu.LDX();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeLDY(CPU &cpu, const Instruction &instruction) {
-    cpu.LDY();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeSTA(CPU &cpu, const Instruction &instruction) {
-    cpu.STA();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeSTX(CPU &cpu, const Instruction &instruction) {
-    cpu.STX();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeSTY(CPU &cpu, const Instruction &instruction) {
-    cpu.STY();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeTAX(CPU &cpu, const Instruction &instruction) {
-    cpu.TAX();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeTAY(CPU &cpu, const Instruction &instruction) {
-    cpu.TAY();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeTXA(CPU &cpu, const Instruction &instruction) {
-    cpu.TXA();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeTYA(CPU &cpu, const Instruction &instruction) {
-    cpu.TYA();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeTSX(CPU &cpu, const Instruction &instruction) {
-    cpu.TSX();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeTXS(CPU &cpu, const Instruction &instruction) {
-    cpu.TXS();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executePHA(CPU &cpu, const Instruction &instruction) {
-    cpu.PHA();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executePHP(CPU &cpu, const Instruction &instruction) {
-    cpu.PHP();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executePLA(CPU &cpu, const Instruction &instruction) {
-    cpu.PLA();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executePLP(CPU &cpu, const Instruction &instruction) {
-    cpu.PLP();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeAND(CPU &cpu, const Instruction &instruction) {
-    cpu.AND();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeEOR(CPU &cpu, const Instruction &instruction) {
-    cpu.EOR();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeORA(CPU &cpu, const Instruction &instruction) {
-    cpu.ORA();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeBIT(CPU &cpu, const Instruction &instruction) {
-    cpu.BIT();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeADC(CPU &cpu, const Instruction &instruction) {
-    cpu.ADC();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeSBC(CPU &cpu, const Instruction &instruction) {
-    cpu.SBC();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeCMP(CPU &cpu, const Instruction &instruction) {
-    cpu.CMP();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeCPX(CPU &cpu, const Instruction &instruction) {
-    cpu.CPX();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeCPY(CPU &cpu, const Instruction &instruction) {
-    cpu.CPY();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeINC(CPU &cpu, const Instruction &instruction) {
-    cpu.INC();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeINX(CPU &cpu, const Instruction &instruction) {
-    cpu.INX();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeINY(CPU &cpu, const Instruction &instruction) {
-    cpu.INY();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeDEC(CPU &cpu, const Instruction &instruction) {
-    cpu.DEC();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeDEX(CPU &cpu, const Instruction &instruction) {
-    cpu.DEX();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeDEY(CPU &cpu, const Instruction &instruction) {
-    cpu.DEY();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeASL(CPU &cpu, const Instruction &instruction) {
-    cpu.ASL();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeLSR(CPU &cpu, const Instruction &instruction) {
-    cpu.LSR();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeROL(CPU &cpu, const Instruction &instruction) {
-    cpu.ROL();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeROR(CPU &cpu, const Instruction &instruction) {
-    cpu.ROR();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeJMP(CPU &cpu, const Instruction &instruction) {
-    cpu.JMP();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeJSR(CPU &cpu, const Instruction &instruction) {
-    cpu.JSR();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeRTS(CPU &cpu, const Instruction &instruction) {
-    cpu.RTS();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeBCC(CPU &cpu, const Instruction &instruction) {
-    cpu.BCC();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeBCS(CPU &cpu, const Instruction &instruction) {
-    cpu.BCS();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeBEQ(CPU &cpu, const Instruction &instruction) {
-    cpu.BEQ();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeBMI(CPU &cpu, const Instruction &instruction) {
-    cpu.BMI();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeBNE(CPU &cpu, const Instruction &instruction) {
-    cpu.BNE();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeBPL(CPU &cpu, const Instruction &instruction) {
-    cpu.BPL();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeBVC(CPU &cpu, const Instruction &instruction) {
-    cpu.BVC();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeBVS(CPU &cpu, const Instruction &instruction) {
-    cpu.BVS();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeCLC(CPU &cpu, const Instruction &instruction) {
-    cpu.CLC();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeCLD(CPU &cpu, const Instruction &instruction) {
-    cpu.CLD();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeCLI(CPU &cpu, const Instruction &instruction) {
-    cpu.CLI();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeCLV(CPU &cpu, const Instruction &instruction) {
-    cpu.CLV();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeSEC(CPU &cpu, const Instruction &instruction) {
-    cpu.SEC();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeSED(CPU &cpu, const Instruction &instruction) {
-    cpu.SED();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeSEI(CPU &cpu, const Instruction &instruction) {
-    cpu.SEI();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeBRK(CPU &cpu, const Instruction &instruction) {
-    cpu.BRK();
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeNOP(CPU &cpu, const Instruction &instruction) {
-    cpu.addCycles(instruction.cycles);
-  }
-
-  static void executeRTI(CPU &cpu, const Instruction &instruction) {
-    cpu.RTI();
-    cpu.addCycles(instruction.cycles);
-  }
-
   // Helper functions
-  Byte fetchOperand(AddressingMode mode) {
-    switch (mode) {
-    case AddressingMode::Immediate:
-      return read(registers_.PC++);
-    case AddressingMode::ZeroPage:
-      return read(read(registers_.PC++));
-    case AddressingMode::ZeroPageX:
-      return read((read(registers_.PC++) + registers_.X) & 0xFF);
-    case AddressingMode::ZeroPageY:
-      return read((read(registers_.PC++) + registers_.Y) & 0xFF);
-    case AddressingMode::Absolute:
-      return read(fetchAddress(AddressingMode::Absolute));
-    case AddressingMode::AbsoluteX:
-      return read(fetchAddress(AddressingMode::Absolute) + registers_.X);
-    case AddressingMode::AbsoluteY:
-      return read(fetchAddress(AddressingMode::Absolute) + registers_.Y);
-
-    default:
-      throw std::runtime_error("Unimplemented addressing mode");
-    }
-  }
-
-  Word fetchAddress(AddressingMode mode) {
-    switch (mode) {
-    case AddressingMode::ZeroPage:
-      return read(registers_.PC++);
-    case AddressingMode::ZeroPageX:
-      return (read(registers_.PC++) + registers_.X) & 0xFF;
-    case AddressingMode::ZeroPageY:
-      return (read(registers_.PC++) + registers_.Y) & 0xFF;
-    case AddressingMode::Absolute:
-      return read(registers_.PC++) | (read(registers_.PC++) << 8);
-    case AddressingMode::AbsoluteX:
-      return (read(registers_.PC++) | (read(registers_.PC++) << 8)) +
-             registers_.X;
-    case AddressingMode::AbsoluteY:
-      return (read(registers_.PC++) | (read(registers_.PC++) << 8)) +
-             registers_.Y;
-    case AddressingMode::Indirect: {
-      Word ptr = read(registers_.PC++) | (read(registers_.PC++) << 8);
-      return read(ptr) | (read((ptr + 1) & 0xFFFF) << 8);
-    }
-    default:
-      throw std::runtime_error("Unimplemented addressing mode");
-    }
-  }
-
-  void updateZeroAndNegativeFlags(Byte value) {
-    registers_.P.Z = (value == 0);
-    registers_.P.N = (value & 0x80) != 0;
-  }
-
-  std::uint64_t totalCycles = 0; // New member to keep track of total cycles
+  Byte fetchOperand(AddressingMode mode);
+  Word fetchAddress(AddressingMode mode);
+  void updateZeroAndNegativeFlags(Byte value);
+  std::vector<uint8_t> disassemble(const std::vector<uint8_t> &code);
 };
 
 } // namespace m6502

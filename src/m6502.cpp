@@ -1,339 +1,307 @@
-#include <iostream>
+#include <cstdint>
 #include <m6502.h>
-#include <regex>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace m6502 {
 
 void CPU::reset() {
   registers_.reset();
   memory_.fill(0);
+  memory_[0xFFFC] = 0x00;
+  memory_[0xFFFD] = 0x02;
   initializeTables();
-  for (const auto &entry : opcodeTable_) {
-    std::cout << "Opcode: " << std::hex << static_cast<int>(entry.first)
-              << ", Mnemonic: " << entry.second.mnemonic
-              << ", Cycles: " << std::dec << entry.second.cycles
-              << ", Mode: " << static_cast<int>(entry.second.mode) << std::endl;
-  }
-  for (const auto &entry : executeTable_) {
-    std::cout << "Mnemonic: " << entry.first << std::endl;
-  }
+  registers_.PC = read(0xFFFC) | (read(0xFFFD) << 8);
 }
 
 void CPU::step() {
-  // Fetch
-  Byte opcode = read(registers_.PC);
-  registers_.PC++;
-
-  // Decode
-  std::cout << std::hex << static_cast<int>(opcode) << std::endl;
+  Byte opcode = read(registers_.PC++);
   auto it = opcodeTable_.find(opcode);
   if (it == opcodeTable_.end()) {
-    throw std::runtime_error("Unknown opcode");
+    throw std::runtime_error("Unknown opcode: " + std::to_string(opcode));
   }
   const Instruction &instruction = it->second;
 
-  // Execute
-  auto execIt = executeTable_.find(instruction.mnemonic);
-  if (execIt == executeTable_.end()) {
+  // Use a switch statement instead of a map for better performance
+  switch (instruction.mnemonic) {
+  case Operation::ADC:
+    ADC(instruction);
+    break;
+  case Operation::AND:
+    AND(instruction);
+    break;
+  case Operation::ASL:
+    ASL(instruction);
+    break;
+  case Operation::BCC:
+    BCC(instruction);
+    break;
+  case Operation::BCS:
+    BCS(instruction);
+    break;
+  case Operation::BEQ:
+    BEQ(instruction);
+    break;
+  case Operation::BIT:
+    BIT(instruction);
+    break;
+  case Operation::BMI:
+    BMI(instruction);
+    break;
+  case Operation::BNE:
+    BNE(instruction);
+    break;
+  case Operation::BPL:
+    BPL(instruction);
+    break;
+  case Operation::BRK:
+    BRK(instruction);
+    break;
+  case Operation::BVC:
+    BVC(instruction);
+    break;
+  case Operation::BVS:
+    BVS(instruction);
+    break;
+  case Operation::CLC:
+    CLC(instruction);
+    break;
+  case Operation::CLD:
+    CLD(instruction);
+    break;
+  case Operation::CLI:
+    CLI(instruction);
+    break;
+  case Operation::CLV:
+    CLV(instruction);
+    break;
+  case Operation::CMP:
+    CMP(instruction);
+    break;
+  case Operation::CPX:
+    CPX(instruction);
+    break;
+  case Operation::CPY:
+    CPY(instruction);
+    break;
+  case Operation::DEC:
+    DEC(instruction);
+    break;
+  case Operation::DEX:
+    DEX(instruction);
+    break;
+  case Operation::DEY:
+    DEY(instruction);
+    break;
+  case Operation::EOR:
+    EOR(instruction);
+    break;
+  case Operation::INC:
+    INC(instruction);
+    break;
+  case Operation::INX:
+    INX(instruction);
+    break;
+  case Operation::INY:
+    INY(instruction);
+    break;
+  case Operation::JMP:
+    JMP(instruction);
+    break;
+  case Operation::JSR:
+    JSR(instruction);
+    break;
+  case Operation::LDA:
+    LDA(instruction);
+    break;
+  case Operation::LDX:
+    LDX(instruction);
+    break;
+  case Operation::LDY:
+    LDY(instruction);
+    break;
+  case Operation::LSR:
+    LSR(instruction);
+    break;
+  case Operation::NOP:
+    NOP(instruction);
+    break;
+  case Operation::ORA:
+    ORA(instruction);
+    break;
+  case Operation::PHA:
+    PHA(instruction);
+    break;
+  case Operation::PHP:
+    PHP(instruction);
+    break;
+  case Operation::PLA:
+    PLA(instruction);
+    break;
+  case Operation::PLP:
+    PLP(instruction);
+    break;
+  case Operation::ROL:
+    ROL(instruction);
+    break;
+  case Operation::ROR:
+    ROR(instruction);
+    break;
+  case Operation::RTI:
+    RTI(instruction);
+    break;
+  case Operation::RTS:
+    RTS(instruction);
+    break;
+  case Operation::SBC:
+    SBC(instruction);
+    break;
+  case Operation::SEC:
+    SEC(instruction);
+    break;
+  case Operation::SED:
+    SED(instruction);
+    break;
+  case Operation::SEI:
+    SEI(instruction);
+    break;
+  case Operation::STA:
+    STA(instruction);
+    break;
+  case Operation::STX:
+    STX(instruction);
+    break;
+  case Operation::STY:
+    STY(instruction);
+    break;
+  case Operation::TAX:
+    TAX(instruction);
+    break;
+  case Operation::TAY:
+    TAY(instruction);
+    break;
+  case Operation::TSX:
+    TSX(instruction);
+    break;
+  case Operation::TXA:
+    TXA(instruction);
+    break;
+  case Operation::TXS:
+    TXS(instruction);
+    break;
+  case Operation::TYA:
+    TYA(instruction);
+    break;
+  default:
     throw std::runtime_error("Unimplemented instruction");
   }
-  execIt->second(*this, instruction);
 }
 
-void CPU::run() {
+void CPU::run(std::vector<uint8_t> program, const char mode) {
   reset();
-  uint8_t program[] = {
-      0xA9, 0x05, // LDA #$05    ; Load 5 into accumulator
-      0x85, 0x10, // STA $10     ; Store accumulator to zero page address $10
-      0xA2, 0x0A, // LDX #$0A    ; Load 10 into X register
-      0xA0, 0x15, // LDY #$15    ; Load 21 into Y register
-      0x18,       // CLC         ; Clear carry flag
-      0x69, 0x03, // ADC #$03    ; Add 3 to accumulator (should be 8 now)
-      0x65, 0x10, // ADC $10     ; Add value at zero page address $10 (5) to
-                  // accumulator (should be 13 now)
-      0x8D, 0x00,
-      0x20, // STA $2000   ; Store accumulator to absolute address $2000
-      0xAD, 0x00, 0x20, // LDA $2000   ; Load from absolute address $2000
-      0x29, 0x0F,       // AND #$0F    ; AND accumulator with 0F (should be 0D)
-      0x49, 0xFF,       // EOR #$FF    ; XOR accumulator with FF (should be F2)
-      0x09, 0x03,       // ORA #$03    ; OR accumulator with 03 (should be F3)
-      0xC9,
-      0xF0, // CMP #$F0    ; Compare accumulator with F0 (should set carry flag)
-      0xB0, 0x02, // BCS +2      ; Branch if carry set (should branch)
-      0xA9, 0x00, // LDA #$00    ; This should be skipped
-      0xE8,       // INX         ; Increment X (should be 11 now)
-      0xCA,       // DEX         ; Decrement X (should be 10 again)
-      0xE0, 0x0A, // CPX #$0A    ; Compare X with 0A (should set zero flag)
-      0xF0, 0x02, // BEQ +2      ; Branch if zero (should branch)
-      0xA2, 0x00, // LDX #$00    ; This should be skipped
-      0x38,       // SEC         ; Set carry flag
-      0xA9, 0x05, // LDA #$05    ; Load 5 into accumulator
-      0xE9, 0x03, // SBC #$03    ; Subtract 3 from accumulator (should be 2)
-      0x0A, // ASL A       ; Arithmetic shift left accumulator (should be 4)
-      0x4A, // LSR A       ; Logical shift right accumulator (should be 2)
-      0x2A, // ROL A       ; Rotate left accumulator (should be 4 with carry
-            // set)
-      0x6A, // ROR A       ; Rotate right accumulator (should be 2 with carry
-            // set)
-      0xA9, 0xFF, // LDA #$FF    ; Load FF into accumulator
-      0x48,       // PHA         ; Push accumulator to stack
-      0xA9, 0x00, // LDA #$00    ; Load 00 into accumulator
-      0x68, // PLA         ; Pull from stack to accumulator (should be FF again)
-      0x20, 0x50, 0x00, // JSR $0050   ; Jump to subroutine at $0050
-      0xEA,             // NOP         ; No operation
-      0x00,             // BRK         ; Break
-      // Subroutine at $0050
-      0xE6, 0x10, // INC $10     ; Increment value at zero page address $10
-      0xC6, 0x10, // DEC $10     ; Decrement value at zero page address $10
-      0x60        // RTS         ; Return from subroutine
-  };
-  int i{0};
-  for (const auto &byte : program) {
-    write(i, byte);
-    i++;
+  if (mode == 'a') {
+    std::vector<uint8_t> code = disassemble(program);
+    for (Byte i = 0; i < sizeof(code); ++i) {
+      write(i + 0x0200, program[i]);
+    }
+  } else {
+    for (Byte i = 0; i < sizeof(program); ++i) {
+      write(i + 0x0200, program[i]);
+    }
   }
-  //  memory_[0] = 0xEA;
+
   while (true) {
     step();
     // Add any necessary break conditions
   }
 }
 
-CPU::AddressingMode CPU::detectAddressingMode(const std::string &instruction) {
-  static const std::array<std::pair<std::regex, AddressingMode>, 11> patterns =
-      {{{std::regex(R"(#\$[0-9A-Fa-f]{2})"), AddressingMode::Immediate},
-        {std::regex(R"(\$[0-9A-Fa-f]{2}\s*,\s*X)"), AddressingMode::ZeroPageX},
-        {std::regex(R"(\$[0-9A-Fa-f]{2}\s*,\s*Y)"), AddressingMode::ZeroPageY},
-        {std::regex(R"(\$[0-9A-Fa-f]{2}(?!\s*,))"), AddressingMode::ZeroPage},
-        {std::regex(R"(\$[0-9A-Fa-f]{4}\s*,\s*X)"), AddressingMode::AbsoluteX},
-        {std::regex(R"(\$[0-9A-Fa-f]{4}\s*,\s*Y)"), AddressingMode::AbsoluteY},
-        {std::regex(R"(\$[0-9A-Fa-f]{4}(?!\s*,))"), AddressingMode::Absolute},
-        {std::regex(R"(\(\$[0-9A-Fa-f]{2}\s*,\s*X\))"),
-         AddressingMode::IndexedIndirect},
-        {std::regex(R"(\(\$[0-9A-Fa-f]{2}\)\s*,\s*Y)"),
-         AddressingMode::IndirectIndexed},
-        {std::regex(R"(\(\$[0-9A-Fa-f]{4}\))"), AddressingMode::Indirect},
-        {std::regex(R"(^[A-Z]{3}\s+A$)"), AddressingMode::Accumulator}}};
-
-  // Check for Implied mode first (no operands)
-  if (instruction.find_first_of(" \t") == std::string::npos) {
-    return AddressingMode::Implied;
-  }
-
-  // Check against all other patterns
-  for (const auto &[regex, mode] : patterns) {
-    if (std::regex_search(instruction, regex)) {
-      return mode;
+std::vector<uint8_t> CPU::disassemble(const std::vector<uint8_t> &code) {
+  std::vector<uint8_t> disassembled_code;
+  Byte pc = 0;
+  while (pc < sizeof(code)) {
+    Byte opcode = code[pc++];
+    auto it = opcodeTable_.find(opcode);
+    if (it == opcodeTable_.end()) {
+      throw std::runtime_error("Unknown opcode: " + std::to_string(opcode));
     }
+    const Instruction &instruction = it->second;
+    disassembled_code[pc - 1] = instruction.opcode;
   }
-
-  // If no match found, assume it's Relative (for branch instructions)
-  return AddressingMode::Relative;
+  return disassembled_code;
 }
 
-// Byte CPU::read(Word address) const { return memory_[address]; }
-
-// Word CPU::readWord(Word &address) {
-//   Word lowByte = static_cast<Word>(read(address++));
-//   Word highByte = static_cast<Word>(read(address++)) << 8;
-//   return lowByte | highByte;
-// }
-
-void CPU::write(Word address, Byte value) { memory_[address] = value; }
-
-void CPU::initializeExecuteTable() {
-  executeTable_["LDA"] = &CPU::executeLDA;
-  executeTable_["LDX"] = &CPU::executeLDX;
-  executeTable_["LDY"] = &CPU::executeLDY;
-  executeTable_["STA"] = &CPU::executeSTA;
-  executeTable_["STX"] = &CPU::executeSTX;
-  executeTable_["STY"] = &CPU::executeSTY;
-  executeTable_["TAX"] = &CPU::executeTAX;
-  executeTable_["TAY"] = &CPU::executeTAY;
-  executeTable_["TXA"] = &CPU::executeTXA;
-  executeTable_["TYA"] = &CPU::executeTYA;
-  executeTable_["TSX"] = &CPU::executeTSX;
-  executeTable_["TXS"] = &CPU::executeTXS;
-  executeTable_["PHA"] = &CPU::executePHA;
-  executeTable_["PHP"] = &CPU::executePHP;
-  executeTable_["PLA"] = &CPU::executePLA;
-  executeTable_["PLP"] = &CPU::executePLP;
-  executeTable_["AND"] = &CPU::executeAND;
-  executeTable_["EOR"] = &CPU::executeEOR;
-  executeTable_["ORA"] = &CPU::executeORA;
-  executeTable_["BIT"] = &CPU::executeBIT;
-  executeTable_["ADC"] = &CPU::executeADC;
-  executeTable_["SBC"] = &CPU::executeSBC;
-  executeTable_["CMP"] = &CPU::executeCMP;
-  executeTable_["CPX"] = &CPU::executeCPX;
-  executeTable_["CPY"] = &CPU::executeCPY;
-  executeTable_["INC"] = &CPU::executeINC;
-  executeTable_["INX"] = &CPU::executeINX;
-  executeTable_["INY"] = &CPU::executeINY;
-  executeTable_["DEC"] = &CPU::executeDEC;
-  executeTable_["DEX"] = &CPU::executeDEX;
-  executeTable_["DEY"] = &CPU::executeDEY;
-  executeTable_["ASL"] = &CPU::executeASL;
-  executeTable_["LSR"] = &CPU::executeLSR;
-  executeTable_["ROL"] = &CPU::executeROL;
-  executeTable_["ROR"] = &CPU::executeROR;
-  executeTable_["JMP"] = &CPU::executeJMP;
-  executeTable_["JSR"] = &CPU::executeJSR;
-  executeTable_["RTS"] = &CPU::executeRTS;
-  executeTable_["BCC"] = &CPU::executeBCC;
-  executeTable_["BCS"] = &CPU::executeBCS;
-  executeTable_["BEQ"] = &CPU::executeBEQ;
-  executeTable_["BMI"] = &CPU::executeBMI;
-  executeTable_["BNE"] = &CPU::executeBNE;
-  executeTable_["BPL"] = &CPU::executeBPL;
-  executeTable_["BVC"] = &CPU::executeBVC;
-  executeTable_["BVS"] = &CPU::executeBVS;
-  executeTable_["CLC"] = &CPU::executeCLC;
-  executeTable_["CLD"] = &CPU::executeCLD;
-  executeTable_["CLI"] = &CPU::executeCLI;
-  executeTable_["CLV"] = &CPU::executeCLV;
-  executeTable_["SEC"] = &CPU::executeSEC;
-  executeTable_["SED"] = &CPU::executeSED;
-  executeTable_["SEI"] = &CPU::executeSEI;
-  executeTable_["BRK"] = &CPU::executeBRK;
-  executeTable_["NOP"] = &CPU::executeNOP;
-  executeTable_["RTI"] = &CPU::executeRTI;
-}
-
-void CPU::initializeTables() {
-  initializeExecuteTable();
-  auto addInstruction = [this](Byte opcode, const std::string &mnemonic,
-                               std::uint32_t cycles, AddressingMode mode) {
-    Instruction inst{opcode, mnemonic, cycles, mode};
-    opcodeTable_[opcode] = inst;
-    translationTable_[InstructionKey{mnemonic, mode}] = inst;
-  };
-
-  // LDA (Load Accumulator)
-  addInstruction(0xA9, "LDA", 2, AddressingMode::Immediate);
-  addInstruction(0xA5, "LDA", 3, AddressingMode::ZeroPage);
-  addInstruction(0xB5, "LDA", 4, AddressingMode::ZeroPageX);
-  addInstruction(0xAD, "LDA", 4, AddressingMode::Absolute);
-  addInstruction(0xBD, "LDA", 4, AddressingMode::AbsoluteX);
-  addInstruction(0xB9, "LDA", 4, AddressingMode::AbsoluteY);
-  addInstruction(0xA1, "LDA", 6, AddressingMode::IndexedIndirect);
-  addInstruction(0xB1, "LDA", 5, AddressingMode::IndirectIndexed);
-
-  // STA (Store Accumulator)
-  addInstruction(0x85, "STA", 3, AddressingMode::ZeroPage);
-  addInstruction(0x95, "STA", 4, AddressingMode::ZeroPageX);
-  addInstruction(0x8D, "STA", 4, AddressingMode::Absolute);
-  addInstruction(0x9D, "STA", 5, AddressingMode::AbsoluteX);
-  addInstruction(0x99, "STA", 5, AddressingMode::AbsoluteY);
-  addInstruction(0x81, "STA", 6, AddressingMode::IndexedIndirect);
-  addInstruction(0x91, "STA", 6, AddressingMode::IndirectIndexed);
-
-  // ADC (Add with Carry)
-  addInstruction(0x69, "ADC", 2, AddressingMode::Immediate);
-  addInstruction(0x65, "ADC", 3, AddressingMode::ZeroPage);
-  addInstruction(0x75, "ADC", 4, AddressingMode::ZeroPageX);
-  addInstruction(0x6D, "ADC", 4, AddressingMode::Absolute);
-  addInstruction(0x7D, "ADC", 4, AddressingMode::AbsoluteX);
-  addInstruction(0x79, "ADC", 4, AddressingMode::AbsoluteY);
-  addInstruction(0x61, "ADC", 6, AddressingMode::IndexedIndirect);
-  addInstruction(0x71, "ADC", 5, AddressingMode::IndirectIndexed);
-
-  // JMP (Jump)
-  addInstruction(0x4C, "JMP", 3, AddressingMode::Absolute);
-  addInstruction(0x6C, "JMP", 5, AddressingMode::Indirect);
-
-  // JSR (Jump to Subroutine)
-  addInstruction(0x20, "JSR", 6, AddressingMode::Absolute);
-
-  // RTS (Return from Subroutine)
-  addInstruction(0x60, "RTS", 6, AddressingMode::Implied);
-
-  // INX (Increment X Register)
-  addInstruction(0xE8, "INX", 2, AddressingMode::Implied);
-
-  // INY (Increment Y Register)
-  addInstruction(0xC8, "INY", 2, AddressingMode::Implied);
-
-  // NOP (No Operation)
-  addInstruction(0xEA, "NOP", 2, AddressingMode::Implied);
-
-  // CLC (Clear Carry Flag)
-  addInstruction(0x18, "CLC", 2, AddressingMode::Implied);
-
-  // SEC (Set Carry Flag)
-  addInstruction(0x38, "SEC", 2, AddressingMode::Implied);
-}
-
+// Combined operation functions
 // Load/Store Operations
-void CPU::LDA() {
-  Byte value = fetchOperand(opcodeTable_[read(registers_.PC - 1)].mode);
+void CPU::LDA(const Instruction &instruction) {
+  Byte value = fetchOperand(instruction.mode);
   registers_.A = value;
   updateZeroAndNegativeFlags(registers_.A);
 }
 
-void CPU::LDX() {
-  Byte value = fetchOperand(opcodeTable_[read(registers_.PC - 1)].mode);
+void CPU::LDX(const Instruction &instruction) {
+  Byte value = fetchOperand(instruction.mode);
   registers_.X = value;
   updateZeroAndNegativeFlags(registers_.X);
 }
 
-void CPU::LDY() {
-  Byte value = fetchOperand(opcodeTable_[read(registers_.PC - 1)].mode);
+void CPU::LDY(const Instruction &instruction) {
+  Byte value = fetchOperand(instruction.mode);
   registers_.Y = value;
   updateZeroAndNegativeFlags(registers_.Y);
 }
 
-void CPU::STA() {
-  Word address = fetchAddress(opcodeTable_[read(registers_.PC - 1)].mode);
+void CPU::STA(const Instruction &instruction) {
+  Word address = fetchAddress(instruction.mode);
   write(address, registers_.A);
 }
 
-void CPU::STX() {
-  Word address = fetchAddress(opcodeTable_[read(registers_.PC - 1)].mode);
+void CPU::STX(const Instruction &instruction) {
+  Word address = fetchAddress(instruction.mode);
   write(address, registers_.X);
 }
 
-void CPU::STY() {
-  Word address = fetchAddress(opcodeTable_[read(registers_.PC - 1)].mode);
+void CPU::STY(const Instruction &instruction) {
+  Word address = fetchAddress(instruction.mode);
   write(address, registers_.Y);
 }
 
 // Transfer Operations
-void CPU::TAX() {
+void CPU::TAX(const Instruction &instruction) {
   registers_.X = registers_.A;
   updateZeroAndNegativeFlags(registers_.X);
 }
 
-void CPU::TAY() {
+void CPU::TAY(const Instruction &instruction) {
   registers_.Y = registers_.A;
   updateZeroAndNegativeFlags(registers_.Y);
 }
 
-void CPU::TXA() {
+void CPU::TXA(const Instruction &instruction) {
   registers_.A = registers_.X;
   updateZeroAndNegativeFlags(registers_.A);
 }
 
-void CPU::TYA() {
+void CPU::TYA(const Instruction &instruction) {
   registers_.A = registers_.Y;
   updateZeroAndNegativeFlags(registers_.A);
 }
 
 // Stack Operations
-void CPU::TSX() {
+void CPU::TSX(const Instruction &instruction) {
   registers_.X = registers_.SP;
   updateZeroAndNegativeFlags(registers_.X);
 }
 
-void CPU::TXS() { registers_.SP = registers_.X; }
+void CPU::TXS(const Instruction &instruction) { registers_.SP = registers_.X; }
 
-void CPU::PHA() {
+void CPU::PHA(const Instruction &instruction) {
   write(0x100 + registers_.SP, registers_.A);
   registers_.SP--;
 }
 
-void CPU::PHP() {
+void CPU::PHP(const Instruction &instruction) {
   Byte status = (registers_.P.N << 7) | (registers_.P.V << 6) |
                 (registers_.P.U << 5) | (registers_.P.B << 4) |
                 (registers_.P.D << 3) | (registers_.P.I << 2) |
@@ -342,13 +310,13 @@ void CPU::PHP() {
   registers_.SP--;
 }
 
-void CPU::PLA() {
+void CPU::PLA(const Instruction &instruction) {
   registers_.SP++;
   registers_.A = read(0x100 + registers_.SP);
   updateZeroAndNegativeFlags(registers_.A);
 }
 
-void CPU::PLP() {
+void CPU::PLP(const Instruction &instruction) {
   registers_.SP++;
   Byte status = read(0x100 + registers_.SP);
   registers_.P.N = (status & 0x80) != 0;
@@ -362,34 +330,34 @@ void CPU::PLP() {
 }
 
 // Logical Operations
-void CPU::AND() {
-  Byte value = fetchOperand(opcodeTable_[read(registers_.PC - 1)].mode);
+void CPU::AND(const Instruction &instruction) {
+  Byte value = fetchOperand(instruction.mode);
   registers_.A &= value;
   updateZeroAndNegativeFlags(registers_.A);
 }
 
-void CPU::EOR() {
-  Byte value = fetchOperand(opcodeTable_[read(registers_.PC - 1)].mode);
+void CPU::EOR(const Instruction &instruction) {
+  Byte value = fetchOperand(instruction.mode);
   registers_.A ^= value;
   updateZeroAndNegativeFlags(registers_.A);
 }
 
-void CPU::ORA() {
-  Byte value = fetchOperand(opcodeTable_[read(registers_.PC - 1)].mode);
+void CPU::ORA(const Instruction &instruction) {
+  Byte value = fetchOperand(instruction.mode);
   registers_.A |= value;
   updateZeroAndNegativeFlags(registers_.A);
 }
 
-void CPU::BIT() {
-  Byte value = fetchOperand(opcodeTable_[read(registers_.PC - 1)].mode);
+void CPU::BIT(const Instruction &instruction) {
+  Byte value = fetchOperand(instruction.mode);
   registers_.P.Z = (registers_.A & value) == 0;
   registers_.P.N = (value & 0x80) != 0;
   registers_.P.V = (value & 0x40) != 0;
 }
 
 // Arithmetic Operations
-void CPU::ADC() {
-  Byte value = fetchOperand(opcodeTable_[read(registers_.PC - 1)].mode);
+void CPU::ADC(const Instruction &instruction) {
+  Byte value = fetchOperand(instruction.mode);
   Word result = registers_.A + value + (registers_.P.C ? 1 : 0);
 
   registers_.P.C = result > 0xFF;
@@ -398,8 +366,8 @@ void CPU::ADC() {
   updateZeroAndNegativeFlags(registers_.A);
 }
 
-void CPU::SBC() {
-  Byte value = fetchOperand(opcodeTable_[read(registers_.PC - 1)].mode);
+void CPU::SBC(const Instruction &instruction) {
+  Byte value = fetchOperand(instruction.mode);
   Word result = registers_.A - value - (registers_.P.C ? 0 : 1);
 
   registers_.P.C = result < 0x100;
@@ -409,24 +377,24 @@ void CPU::SBC() {
   updateZeroAndNegativeFlags(registers_.A);
 }
 
-void CPU::CMP() {
-  Byte value = fetchOperand(opcodeTable_[read(registers_.PC - 1)].mode);
+void CPU::CMP(const Instruction &instruction) {
+  Byte value = fetchOperand(instruction.mode);
   Word result = registers_.A - value;
 
   registers_.P.C = registers_.A >= value;
   updateZeroAndNegativeFlags(result & 0xFF);
 }
 
-void CPU::CPX() {
-  Byte value = fetchOperand(opcodeTable_[read(registers_.PC - 1)].mode);
+void CPU::CPX(const Instruction &instruction) {
+  Byte value = fetchOperand(instruction.mode);
   Word result = registers_.X - value;
 
   registers_.P.C = registers_.X >= value;
   updateZeroAndNegativeFlags(result & 0xFF);
 }
 
-void CPU::CPY() {
-  Byte value = fetchOperand(opcodeTable_[read(registers_.PC - 1)].mode);
+void CPU::CPY(const Instruction &instruction) {
+  Byte value = fetchOperand(instruction.mode);
   Word result = registers_.Y - value;
 
   registers_.P.C = registers_.Y >= value;
@@ -434,51 +402,50 @@ void CPU::CPY() {
 }
 
 // Increments/Decrements
-void CPU::INC() {
-  Word address = fetchAddress(opcodeTable_[read(registers_.PC - 1)].mode);
+void CPU::INC(const Instruction &instruction) {
+  Word address = fetchAddress(instruction.mode);
   Byte value = read(address);
   value++;
   write(address, value);
   updateZeroAndNegativeFlags(value);
 }
 
-void CPU::INX() {
+void CPU::INX(const Instruction &instruction) {
   registers_.X++;
   updateZeroAndNegativeFlags(registers_.X);
 }
 
-void CPU::INY() {
+void CPU::INY(const Instruction &instruction) {
   registers_.Y++;
   updateZeroAndNegativeFlags(registers_.Y);
 }
 
-void CPU::DEC() {
-  Word address = fetchAddress(opcodeTable_[read(registers_.PC - 1)].mode);
+void CPU::DEC(const Instruction &instruction) {
+  Word address = fetchAddress(instruction.mode);
   Byte value = read(address);
   value--;
   write(address, value);
   updateZeroAndNegativeFlags(value);
 }
 
-void CPU::DEX() {
+void CPU::DEX(const Instruction &instruction) {
   registers_.X--;
   updateZeroAndNegativeFlags(registers_.X);
 }
 
-void CPU::DEY() {
+void CPU::DEY(const Instruction &instruction) {
   registers_.Y--;
   updateZeroAndNegativeFlags(registers_.Y);
 }
 
 // Shifts
-void CPU::ASL() {
-  if (opcodeTable_[read(registers_.PC - 1)].mode ==
-      AddressingMode::Accumulator) {
+void CPU::ASL(const Instruction &instruction) {
+  if (instruction.mode == AddressingMode::Accumulator) {
     registers_.P.C = (registers_.A & 0x80) != 0;
     registers_.A <<= 1;
     updateZeroAndNegativeFlags(registers_.A);
   } else {
-    Word address = fetchAddress(opcodeTable_[read(registers_.PC - 1)].mode);
+    Word address = fetchAddress(instruction.mode);
     Byte value = read(address);
     registers_.P.C = (value & 0x80) != 0;
     value <<= 1;
@@ -487,14 +454,13 @@ void CPU::ASL() {
   }
 }
 
-void CPU::LSR() {
-  if (opcodeTable_[read(registers_.PC - 1)].mode ==
-      AddressingMode::Accumulator) {
+void CPU::LSR(const Instruction &instruction) {
+  if (instruction.mode == AddressingMode::Accumulator) {
     registers_.P.C = (registers_.A & 0x01) != 0;
     registers_.A >>= 1;
     updateZeroAndNegativeFlags(registers_.A);
   } else {
-    Word address = fetchAddress(opcodeTable_[read(registers_.PC - 1)].mode);
+    Word address = fetchAddress(instruction.mode);
     Byte value = read(address);
     registers_.P.C = (value & 0x01) != 0;
     value >>= 1;
@@ -503,15 +469,14 @@ void CPU::LSR() {
   }
 }
 
-void CPU::ROL() {
-  if (opcodeTable_[read(registers_.PC - 1)].mode ==
-      AddressingMode::Accumulator) {
+void CPU::ROL(const Instruction &instruction) {
+  if (instruction.mode == AddressingMode::Accumulator) {
     Byte oldCarry = registers_.P.C ? 1 : 0;
     registers_.P.C = (registers_.A & 0x80) != 0;
     registers_.A = (registers_.A << 1) | oldCarry;
     updateZeroAndNegativeFlags(registers_.A);
   } else {
-    Word address = fetchAddress(opcodeTable_[read(registers_.PC - 1)].mode);
+    Word address = fetchAddress(instruction.mode);
     Byte value = read(address);
     Byte oldCarry = registers_.P.C ? 1 : 0;
     registers_.P.C = (value & 0x80) != 0;
@@ -521,15 +486,14 @@ void CPU::ROL() {
   }
 }
 
-void CPU::ROR() {
-  if (opcodeTable_[read(registers_.PC - 1)].mode ==
-      AddressingMode::Accumulator) {
+void CPU::ROR(const Instruction &instruction) {
+  if (instruction.mode == AddressingMode::Accumulator) {
     Byte oldCarry = registers_.P.C ? 0x80 : 0;
     registers_.P.C = (registers_.A & 0x01) != 0;
     registers_.A = (registers_.A >> 1) | oldCarry;
     updateZeroAndNegativeFlags(registers_.A);
   } else {
-    Word address = fetchAddress(opcodeTable_[read(registers_.PC - 1)].mode);
+    Word address = fetchAddress(instruction.mode);
     Byte value = read(address);
     Byte oldCarry = registers_.P.C ? 0x80 : 0;
     registers_.P.C = (value & 0x01) != 0;
@@ -540,12 +504,12 @@ void CPU::ROR() {
 }
 
 // Jumps and Calls
-void CPU::JMP() {
-  Word address = fetchAddress(opcodeTable_[read(registers_.PC - 1)].mode);
+void CPU::JMP(const Instruction &instruction) {
+  Word address = fetchAddress(instruction.mode);
   registers_.PC = address;
 }
 
-void CPU::JSR() {
+void CPU::JSR(const Instruction &instruction) {
   registers_.PC--;
   write(0x100 + registers_.SP, (registers_.PC >> 8) & 0xFF);
   registers_.SP--;
@@ -554,7 +518,7 @@ void CPU::JSR() {
   registers_.PC = fetchAddress(AddressingMode::Absolute);
 }
 
-void CPU::RTS() {
+void CPU::RTS(const Instruction &instruction) {
   registers_.SP++;
   Word low = read(0x100 + registers_.SP);
   registers_.SP++;
@@ -564,56 +528,56 @@ void CPU::RTS() {
 }
 
 // Branches
-void CPU::BCC() {
+void CPU::BCC(const Instruction &instruction) {
   if (!registers_.P.C) {
     Byte offset = fetchOperand(AddressingMode::Relative);
     registers_.PC += static_cast<int8_t>(offset);
   }
 }
 
-void CPU::BCS() {
+void CPU::BCS(const Instruction &instruction) {
   if (registers_.P.C) {
     Byte offset = fetchOperand(AddressingMode::Relative);
     registers_.PC += static_cast<int8_t>(offset);
   }
 }
 
-void CPU::BEQ() {
+void CPU::BEQ(const Instruction &instruction) {
   if (registers_.P.Z) {
     Byte offset = fetchOperand(AddressingMode::Relative);
     registers_.PC += static_cast<int8_t>(offset);
   }
 }
 
-void CPU::BMI() {
+void CPU::BMI(const Instruction &instruction) {
   if (registers_.P.N) {
     Byte offset = fetchOperand(AddressingMode::Relative);
     registers_.PC += static_cast<int8_t>(offset);
   }
 }
 
-void CPU::BNE() {
+void CPU::BNE(const Instruction &instruction) {
   if (!registers_.P.Z) {
     Byte offset = fetchOperand(AddressingMode::Relative);
     registers_.PC += static_cast<int8_t>(offset);
   }
 }
 
-void CPU::BPL() {
+void CPU::BPL(const Instruction &instruction) {
   if (!registers_.P.N) {
     Byte offset = fetchOperand(AddressingMode::Relative);
     registers_.PC += static_cast<int8_t>(offset);
   }
 }
 
-void CPU::BVC() {
+void CPU::BVC(const Instruction &instruction) {
   if (!registers_.P.V) {
     Byte offset = fetchOperand(AddressingMode::Relative);
     registers_.PC += static_cast<int8_t>(offset);
   }
 }
 
-void CPU::BVS() {
+void CPU::BVS(const Instruction &instruction) {
   if (registers_.P.V) {
     Byte offset = fetchOperand(AddressingMode::Relative);
     registers_.PC += static_cast<int8_t>(offset);
@@ -621,22 +585,22 @@ void CPU::BVS() {
 }
 
 // Status Flag Changes
-void CPU::CLC() { registers_.P.C = false; }
+void CPU::CLC(const Instruction &instruction) { registers_.P.C = false; }
 
-void CPU::CLD() { registers_.P.D = false; }
+void CPU::CLD(const Instruction &instruction) { registers_.P.D = false; }
 
-void CPU::CLI() { registers_.P.I = false; }
+void CPU::CLI(const Instruction &instruction) { registers_.P.I = false; }
 
-void CPU::CLV() { registers_.P.V = false; }
+void CPU::CLV(const Instruction &instruction) { registers_.P.V = false; }
 
-void CPU::SEC() { registers_.P.C = true; }
+void CPU::SEC(const Instruction &instruction) { registers_.P.C = true; }
 
-void CPU::SED() { registers_.P.D = true; }
+void CPU::SED(const Instruction &instruction) { registers_.P.D = true; }
 
-void CPU::SEI() { registers_.P.I = true; }
+void CPU::SEI(const Instruction &instruction) { registers_.P.I = true; }
 
 // System Functions
-void CPU::BRK() {
+void CPU::BRK(const Instruction &instruction) {
   registers_.PC++;
   write(0x100 + registers_.SP, (registers_.PC >> 8) & 0xFF);
   registers_.SP--;
@@ -653,11 +617,11 @@ void CPU::BRK() {
   registers_.PC = read(0xFFFE) | (read(0xFFFF) << 8);
 }
 
-void CPU::NOP() {
+void CPU::NOP(const Instruction &instruction) {
   // No operation
 }
 
-void CPU::RTI() {
+void CPU::RTI(const Instruction &instruction) {
   registers_.SP++;
   Byte status = read(0x100 + registers_.SP);
   registers_.P.N = (status & 0x80) != 0;
@@ -674,6 +638,467 @@ void CPU::RTI() {
   registers_.SP++;
   Word high = read(0x100 + registers_.SP);
   registers_.PC = (high << 8) | low;
+}
+
+void CPU::initializeTables() {
+  auto addInstruction = [this](Byte opcode, const Operation &mnemonic,
+                               std::uint32_t cycles, AddressingMode mode) {
+    Instruction inst{opcode, mnemonic, cycles, mode};
+    opcodeTable_[opcode] = inst;
+    translationTable_[InstructionKey{mnemonic, mode}] = inst;
+  };
+
+  Operation op;
+
+  // ADC (Add with Carry)
+  op = Operation::ADC;
+  addInstruction(0x69, op, 2, AddressingMode::Immediate);
+  addInstruction(0x65, op, 3, AddressingMode::ZeroPage);
+  addInstruction(0x75, op, 4, AddressingMode::ZeroPageX);
+  addInstruction(0x6D, op, 4, AddressingMode::Absolute);
+  addInstruction(0x7D, op, 4, AddressingMode::AbsoluteX);
+  addInstruction(0x79, op, 4, AddressingMode::AbsoluteY);
+  addInstruction(0x61, op, 6, AddressingMode::IndexedIndirect);
+  addInstruction(0x71, op, 5, AddressingMode::IndirectIndexed);
+
+  // AND (Logical AND)
+  op = Operation::AND;
+  addInstruction(0x29, op, 2, AddressingMode::Immediate);
+  addInstruction(0x25, op, 3, AddressingMode::ZeroPage);
+  addInstruction(0x35, op, 4, AddressingMode::ZeroPageX);
+  addInstruction(0x2D, op, 4, AddressingMode::Absolute);
+  addInstruction(0x3D, op, 4, AddressingMode::AbsoluteX);
+  addInstruction(0x39, op, 4, AddressingMode::AbsoluteY);
+  addInstruction(0x21, op, 6, AddressingMode::IndexedIndirect);
+  addInstruction(0x31, op, 5, AddressingMode::IndirectIndexed);
+
+  // ASL (Arithmetic Shift Left)
+  op = Operation::ASL;
+  addInstruction(0x0A, op, 2, AddressingMode::Accumulator);
+  addInstruction(0x06, op, 5, AddressingMode::ZeroPage);
+  addInstruction(0x16, op, 6, AddressingMode::ZeroPageX);
+  addInstruction(0x0E, op, 6, AddressingMode::Absolute);
+  addInstruction(0x1E, op, 7, AddressingMode::AbsoluteX);
+
+  // BCC (Branch if Carry Clear)
+  op = Operation::BCC;
+  addInstruction(0x90, op, 2, AddressingMode::Relative);
+
+  // BCS (Branch if Carry Set)
+  op = Operation::BCS;
+  addInstruction(0xB0, op, 2, AddressingMode::Relative);
+
+  // BEQ (Branch if Equal)
+  op = Operation::BEQ;
+  addInstruction(0xF0, op, 2, AddressingMode::Relative);
+
+  // BIT (Bit Test)
+  op = Operation::BIT;
+  addInstruction(0x24, op, 3, AddressingMode::ZeroPage);
+  addInstruction(0x2C, op, 4, AddressingMode::Absolute);
+
+  // BMI (Branch if Minus)
+  op = Operation::BMI;
+  addInstruction(0x30, op, 2, AddressingMode::Relative);
+
+  // BNE (Branch if Not Equal)
+  op = Operation::BNE;
+  addInstruction(0xD0, op, 2, AddressingMode::Relative);
+
+  // BPL (Branch if Positive)
+  op = Operation::BPL;
+  addInstruction(0x10, op, 2, AddressingMode::Relative);
+
+  // BRK (Force Interrupt)
+  op = Operation::BRK;
+  addInstruction(0x00, op, 7, AddressingMode::Implied);
+
+  // BVC (Branch if Overflow Clear)
+  op = Operation::BVC;
+  addInstruction(0x50, op, 2, AddressingMode::Relative);
+
+  // BVS (Branch if Overflow Set)
+  op = Operation::BVS;
+  addInstruction(0x70, op, 2, AddressingMode::Relative);
+
+  // CLC (Clear Carry Flag)
+  op = Operation::CLC;
+  addInstruction(0x18, op, 2, AddressingMode::Implied);
+
+  // CLD (Clear Decimal Mode)
+  op = Operation::CLD;
+  addInstruction(0xD8, op, 2, AddressingMode::Implied);
+
+  // CLI (Clear Interrupt Disable)
+  op = Operation::CLI;
+  addInstruction(0x58, op, 2, AddressingMode::Implied);
+
+  // CLV (Clear Overflow Flag)
+  op = Operation::CLV;
+  addInstruction(0xB8, op, 2, AddressingMode::Implied);
+
+  // CMP (Compare)
+  op = Operation::CMP;
+  addInstruction(0xC9, op, 2, AddressingMode::Immediate);
+  addInstruction(0xC5, op, 3, AddressingMode::ZeroPage);
+  addInstruction(0xD5, op, 4, AddressingMode::ZeroPageX);
+  addInstruction(0xCD, op, 4, AddressingMode::Absolute);
+  addInstruction(0xDD, op, 4, AddressingMode::AbsoluteX);
+  addInstruction(0xD9, op, 4, AddressingMode::AbsoluteY);
+  addInstruction(0xC1, op, 6, AddressingMode::IndexedIndirect);
+  addInstruction(0xD1, op, 5, AddressingMode::IndirectIndexed);
+
+  // CPX (Compare X Register)
+  op = Operation::CPX;
+  addInstruction(0xE0, op, 2, AddressingMode::Immediate);
+  addInstruction(0xE4, op, 3, AddressingMode::ZeroPage);
+  addInstruction(0xEC, op, 4, AddressingMode::Absolute);
+
+  // CPY (Compare Y Register)
+  op = Operation::CPY;
+  addInstruction(0xC0, op, 2, AddressingMode::Immediate);
+  addInstruction(0xC4, op, 3, AddressingMode::ZeroPage);
+  addInstruction(0xCC, op, 4, AddressingMode::Absolute);
+
+  // DEC (Decrement Memory)
+  op = Operation::DEC;
+  addInstruction(0xC6, op, 5, AddressingMode::ZeroPage);
+  addInstruction(0xD6, op, 6, AddressingMode::ZeroPageX);
+  addInstruction(0xCE, op, 6, AddressingMode::Absolute);
+  addInstruction(0xDE, op, 7, AddressingMode::AbsoluteX);
+
+  // DEX (Decrement X Register)
+  op = Operation::DEX;
+  addInstruction(0xCA, op, 2, AddressingMode::Implied);
+
+  // DEY (Decrement Y Register)
+  op = Operation::DEY;
+  addInstruction(0x88, op, 2, AddressingMode::Implied);
+
+  // EOR (Exclusive OR)
+  op = Operation::EOR;
+  addInstruction(0x49, op, 2, AddressingMode::Immediate);
+  addInstruction(0x45, op, 3, AddressingMode::ZeroPage);
+  addInstruction(0x55, op, 4, AddressingMode::ZeroPageX);
+  addInstruction(0x4D, op, 4, AddressingMode::Absolute);
+  addInstruction(0x5D, op, 4, AddressingMode::AbsoluteX);
+  addInstruction(0x59, op, 4, AddressingMode::AbsoluteY);
+  addInstruction(0x41, op, 6, AddressingMode::IndexedIndirect);
+  addInstruction(0x51, op, 5, AddressingMode::IndirectIndexed);
+
+  // INC (Increment Memory)
+  op = Operation::INC;
+  addInstruction(0xE6, op, 5, AddressingMode::ZeroPage);
+  addInstruction(0xF6, op, 6, AddressingMode::ZeroPageX);
+  addInstruction(0xEE, op, 6, AddressingMode::Absolute);
+  addInstruction(0xFE, op, 7, AddressingMode::AbsoluteX);
+
+  // INX (Increment X Register)
+  op = Operation::INX;
+  addInstruction(0xE8, op, 2, AddressingMode::Implied);
+
+  // INY (Increment Y Register)
+  op = Operation::INY;
+  addInstruction(0xC8, op, 2, AddressingMode::Implied);
+
+  // JMP (Jump)
+  op = Operation::JMP;
+  addInstruction(0x4C, op, 3, AddressingMode::Absolute);
+  addInstruction(0x6C, op, 5, AddressingMode::Indirect);
+
+  // JSR (Jump to Subroutine)
+  op = Operation::JSR;
+  addInstruction(0x20, op, 6, AddressingMode::Absolute);
+
+  // LDA (Load Accumulator)
+  op = Operation::LDA;
+  addInstruction(0xA9, op, 2, AddressingMode::Immediate);
+  addInstruction(0xA5, op, 3, AddressingMode::ZeroPage);
+  addInstruction(0xB5, op, 4, AddressingMode::ZeroPageX);
+  addInstruction(0xAD, op, 4, AddressingMode::Absolute);
+  addInstruction(0xBD, op, 4, AddressingMode::AbsoluteX);
+  addInstruction(0xB9, op, 4, AddressingMode::AbsoluteY);
+  addInstruction(0xA1, op, 6, AddressingMode::IndexedIndirect);
+  addInstruction(0xB1, op, 5, AddressingMode::IndirectIndexed);
+
+  // LDX (Load X Register)
+  op = Operation::LDX;
+  addInstruction(0xA2, op, 2, AddressingMode::Immediate);
+  addInstruction(0xA6, op, 3, AddressingMode::ZeroPage);
+  addInstruction(0xB6, op, 4, AddressingMode::ZeroPageY);
+  addInstruction(0xAE, op, 4, AddressingMode::Absolute);
+  addInstruction(0xBE, op, 4, AddressingMode::AbsoluteY);
+
+  // LDY (Load Y Register)
+  op = Operation::LDY;
+  addInstruction(0xA0, op, 2, AddressingMode::Immediate);
+  addInstruction(0xA4, op, 3, AddressingMode::ZeroPage);
+  addInstruction(0xB4, op, 4, AddressingMode::ZeroPageX);
+  addInstruction(0xAC, op, 4, AddressingMode::Absolute);
+  addInstruction(0xBC, op, 4, AddressingMode::AbsoluteX);
+
+  // LSR (Logical Shift Right)
+  op = Operation::LSR;
+  addInstruction(0x4A, op, 2, AddressingMode::Accumulator);
+  addInstruction(0x46, op, 5, AddressingMode::ZeroPage);
+  addInstruction(0x56, op, 6, AddressingMode::ZeroPageX);
+  addInstruction(0x4E, op, 6, AddressingMode::Absolute);
+  addInstruction(0x5E, op, 7, AddressingMode::AbsoluteX);
+
+  // NOP (No Operation)
+  op = Operation::NOP;
+  addInstruction(0xEA, op, 2, AddressingMode::Implied);
+
+  // ORA (Logical Inclusive OR)
+  op = Operation::ORA;
+  addInstruction(0x09, op, 2, AddressingMode::Immediate);
+  addInstruction(0x05, op, 3, AddressingMode::ZeroPage);
+  addInstruction(0x15, op, 4, AddressingMode::ZeroPageX);
+  addInstruction(0x0D, op, 4, AddressingMode::Absolute);
+  addInstruction(0x1D, op, 4, AddressingMode::AbsoluteX);
+  addInstruction(0x19, op, 4, AddressingMode::AbsoluteY);
+  addInstruction(0x01, op, 6, AddressingMode::IndexedIndirect);
+  addInstruction(0x11, op, 5, AddressingMode::IndirectIndexed);
+
+  // PHA (Push Accumulator)
+  op = Operation::PHA;
+  addInstruction(0x48, op, 3, AddressingMode::Implied);
+
+  // PHP (Push Processor Status)
+  op = Operation::PHP;
+  addInstruction(0x08, op, 3, AddressingMode::Implied);
+
+  // PLA (Pull Accumulator)
+  op = Operation::PLA;
+  addInstruction(0x68, op, 4, AddressingMode::Implied);
+
+  // PLP (Pull Processor Status)
+  op = Operation::PLP;
+  addInstruction(0x28, op, 4, AddressingMode::Implied);
+
+  // ROL (Rotate Left)
+  op = Operation::ROL;
+  addInstruction(0x2A, op, 2, AddressingMode::Accumulator);
+  addInstruction(0x26, op, 5, AddressingMode::ZeroPage);
+  addInstruction(0x36, op, 6, AddressingMode::ZeroPageX);
+  addInstruction(0x2E, op, 6, AddressingMode::Absolute);
+  addInstruction(0x3E, op, 7, AddressingMode::AbsoluteX);
+
+  // ROR (Rotate Right)
+  op = Operation::ROR;
+  addInstruction(0x6A, op, 2, AddressingMode::Accumulator);
+  addInstruction(0x66, op, 5, AddressingMode::ZeroPage);
+  addInstruction(0x76, op, 6, AddressingMode::ZeroPageX);
+  addInstruction(0x6E, op, 6, AddressingMode::Absolute);
+  addInstruction(0x7E, op, 7, AddressingMode::AbsoluteX);
+
+  // RTI (Return from Interrupt)
+  op = Operation::RTI;
+  addInstruction(0x40, op, 6, AddressingMode::Implied);
+
+  // RTS (Return from Subroutine)
+  op = Operation::RTS;
+  addInstruction(0x60, op, 6, AddressingMode::Implied);
+
+  // SBC (Subtract with Carry)
+  op = Operation::SBC;
+  addInstruction(0xE9, op, 2, AddressingMode::Immediate);
+  addInstruction(0xE5, op, 3, AddressingMode::ZeroPage);
+  addInstruction(0xF5, op, 4, AddressingMode::ZeroPageX);
+  addInstruction(0xED, op, 4, AddressingMode::Absolute);
+  addInstruction(0xFD, op, 4, AddressingMode::AbsoluteX);
+  addInstruction(0xF9, op, 4, AddressingMode::AbsoluteY);
+  addInstruction(0xE1, op, 6, AddressingMode::IndexedIndirect);
+  addInstruction(0xF1, op, 5, AddressingMode::IndirectIndexed);
+
+  // SEC (Set Carry Flag)
+  op = Operation::SEC;
+  addInstruction(0x38, op, 2, AddressingMode::Implied);
+
+  // SED (Set Decimal Flag)
+  op = Operation::SED;
+  addInstruction(0xF8, op, 2, AddressingMode::Implied);
+
+  // SEI (Set Interrupt Disable)
+  op = Operation::SEI;
+  addInstruction(0x78, op, 2, AddressingMode::Implied);
+
+  // STA (Store Accumulator)
+  op = Operation::STA;
+  addInstruction(0x85, op, 3, AddressingMode::ZeroPage);
+  addInstruction(0x95, op, 4, AddressingMode::ZeroPageX);
+  addInstruction(0x8D, op, 4, AddressingMode::Absolute);
+  addInstruction(0x9D, op, 5, AddressingMode::AbsoluteX);
+  addInstruction(0x99, op, 5, AddressingMode::AbsoluteY);
+  addInstruction(0x81, op, 6, AddressingMode::IndexedIndirect);
+  addInstruction(0x91, op, 6, AddressingMode::IndirectIndexed);
+
+  // STX (Store X Register)
+  op = Operation::STX;
+  addInstruction(0x86, op, 3, AddressingMode::ZeroPage);
+  addInstruction(0x96, op, 4, AddressingMode::ZeroPageY);
+  addInstruction(0x8E, op, 4, AddressingMode::Absolute);
+
+  // STY (Store Y Register)
+  op = Operation::STY;
+  addInstruction(0x84, op, 3, AddressingMode::ZeroPage);
+  addInstruction(0x94, op, 4, AddressingMode::ZeroPageX);
+  addInstruction(0x8C, op, 4, AddressingMode::Absolute);
+
+  // TAX (Transfer Accumulator to X)
+  op = Operation::TAX;
+  addInstruction(0xAA, op, 2, AddressingMode::Implied);
+
+  // TAY (Transfer Accumulator to Y)
+  op = Operation::TAY;
+  addInstruction(0xA8, op, 2, AddressingMode::Implied);
+
+  // TSX (Transfer Stack Pointer to X)
+  op = Operation::TSX;
+  addInstruction(0xBA, op, 2, AddressingMode::Implied);
+
+  // TXA (Transfer X to Accumulator)
+  op = Operation::TXA;
+  addInstruction(0x8A, op, 2, AddressingMode::Implied);
+
+  // TXS (Transfer X to Stack Pointer)
+  op = Operation::TXS;
+  addInstruction(0x9A, op, 2, AddressingMode::Implied);
+
+  // TYA (Transfer Y to Accumulator)
+  op = Operation::TYA;
+  addInstruction(0x98, op, 2, AddressingMode::Implied);
+}
+
+// Helper functions
+Byte CPU::fetchOperand(AddressingMode mode) {
+  switch (mode) {
+  case AddressingMode::Implied:
+  case AddressingMode::Accumulator:
+    // These modes don't fetch an operand
+    return 0;
+
+  case AddressingMode::Immediate:
+    return read(registers_.PC++);
+
+  case AddressingMode::ZeroPage:
+    return read(read(registers_.PC++));
+
+  case AddressingMode::ZeroPageX:
+    return read((read(registers_.PC++) + registers_.X) & 0xFF);
+
+  case AddressingMode::ZeroPageY:
+    return read((read(registers_.PC++) + registers_.Y) & 0xFF);
+
+  case AddressingMode::Relative:
+    return read(registers_.PC++);
+
+  case AddressingMode::Absolute: {
+    Word address = read(registers_.PC++) | (read(registers_.PC++) << 8);
+    return read(address);
+  }
+
+  case AddressingMode::AbsoluteX: {
+    Word address = read(registers_.PC++) | (read(registers_.PC++) << 8);
+    return read(address + registers_.X);
+  }
+
+  case AddressingMode::AbsoluteY: {
+    Word address = read(registers_.PC++) | (read(registers_.PC++) << 8);
+    return read(address + registers_.Y);
+  }
+
+  case AddressingMode::Indirect: {
+    Word pointer = read(registers_.PC++) | (read(registers_.PC++) << 8);
+    Word address = read(pointer) |
+                   (read((pointer & 0xFF00) | ((pointer + 1) & 0x00FF)) << 8);
+    return read(address);
+  }
+
+  case AddressingMode::IndexedIndirect: {
+    Byte zeroPageAddress = (read(registers_.PC++) + registers_.X) & 0xFF;
+    Word address =
+        read(zeroPageAddress) | (read((zeroPageAddress + 1) & 0xFF) << 8);
+    return read(address);
+  }
+
+  case AddressingMode::IndirectIndexed: {
+    Byte zeroPageAddress = read(registers_.PC++);
+    Word address =
+        read(zeroPageAddress) | (read((zeroPageAddress + 1) & 0xFF) << 8);
+    return read(address + registers_.Y);
+  }
+
+  default:
+    throw std::runtime_error("Unimplemented addressing mode");
+  }
+}
+
+Word CPU::fetchAddress(AddressingMode mode) {
+  switch (mode) {
+  case AddressingMode::Implied:
+  case AddressingMode::Accumulator:
+  case AddressingMode::Immediate:
+    // These modes don't use an address
+    return 0;
+
+  case AddressingMode::ZeroPage:
+    return read(registers_.PC++);
+
+  case AddressingMode::ZeroPageX:
+    return (read(registers_.PC++) + registers_.X) & 0xFF;
+
+  case AddressingMode::ZeroPageY:
+    return (read(registers_.PC++) + registers_.Y) & 0xFF;
+
+  case AddressingMode::Relative: {
+    Byte offset = read(registers_.PC++);
+    // Convert to signed offset
+    return registers_.PC + static_cast<int8_t>(offset);
+  }
+
+  case AddressingMode::Absolute:
+    return read(registers_.PC++) | (read(registers_.PC++) << 8);
+
+  case AddressingMode::AbsoluteX: {
+    Word base = read(registers_.PC++) | (read(registers_.PC++) << 8);
+    return base + registers_.X;
+  }
+
+  case AddressingMode::AbsoluteY: {
+    Word base = read(registers_.PC++) | (read(registers_.PC++) << 8);
+    return base + registers_.Y;
+  }
+
+  case AddressingMode::Indirect: {
+    Word pointer = read(registers_.PC++) | (read(registers_.PC++) << 8);
+    // Simulate the 6502 bug with indirect jump
+    if ((pointer & 0xFF) == 0xFF) {
+      return read(pointer) | (read(pointer & 0xFF00) << 8);
+    } else {
+      return read(pointer) | (read(pointer + 1) << 8);
+    }
+  }
+
+  case AddressingMode::IndexedIndirect: {
+    Byte zeroPageAddress = (read(registers_.PC++) + registers_.X) & 0xFF;
+    return read(zeroPageAddress) | (read((zeroPageAddress + 1) & 0xFF) << 8);
+  }
+
+  case AddressingMode::IndirectIndexed: {
+    Byte zeroPageAddress = read(registers_.PC++);
+    Word base =
+        read(zeroPageAddress) | (read((zeroPageAddress + 1) & 0xFF) << 8);
+    return base + registers_.Y;
+  }
+
+  default:
+    throw std::runtime_error("Unimplemented addressing mode");
+  }
+}
+void CPU::updateZeroAndNegativeFlags(Byte value) {
+  registers_.P.Z = (value == 0);
+  registers_.P.N = (value & 0x80) != 0;
 }
 
 } // namespace m6502
