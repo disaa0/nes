@@ -94,7 +94,8 @@ public:
 
   void reset();
   void step();
-  void run(std::vector<uint8_t> program, const char mode = 'b');
+  // template <typename T> 
+  void run(std::vector<std::string> program, const char mode = 'b');
 
   AddressingMode detectAddressingMode(const std::string &instruction);
 
@@ -163,6 +164,7 @@ private:
   std::unordered_map<Byte, Instruction> opcodeTable_;
   std::unordered_map<InstructionKey, Instruction, InstructionKeyHash>
       translationTable_;
+  std::unordered_map<Operation, std::vector<Instruction>> operationTable_;
 
   // Memory Access
   Byte read(Word address) const { return memory_[address]; }
@@ -236,7 +238,15 @@ private:
   Byte fetchOperand(AddressingMode mode);
   Word fetchAddress(AddressingMode mode);
   void updateZeroAndNegativeFlags(Byte value);
-  std::vector<uint8_t> disassemble(const std::vector<uint8_t> &code);
+  std::vector<std::string> disassemble(const std::vector<uint8_t> &code);
+  std::string mnemonicToString(Operation mnemonic);
+  std::string byteToHex(uint8_t byte);
+  std::string wordToHex(uint16_t word);
+  std::vector<uint8_t> assemble(const std::vector<std::string> &code);
+  Operation stringToMnemonic(const std::string &str);
+  bool matchAddressingMode(const std::string &operand, AddressingMode mode);
+  uint16_t parseOperand(const std::string &operand, AddressingMode mode);
+  bool isLabel(const std::string &operand);
 };
 
 } // namespace m6502
