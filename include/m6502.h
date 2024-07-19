@@ -1,103 +1,130 @@
 #pragma once
 
-#include <array>
+#include <chrono>
 #include <cstdint>
-#include <functional>
 #include <string>
 #include <unordered_map>
-#include <vector>
 
-namespace m6502 {
-
+namespace nes {
 using Byte = std::uint8_t;
 using Word = std::uint16_t;
 using Address = std::uint16_t;
 
+enum class AddressingMode {
+  Implied,
+  Accumulator,
+  Immediate,
+  ZeroPage,
+  ZeroPageX,
+  ZeroPageY,
+  Relative,
+  Absolute,
+  AbsoluteX,
+  AbsoluteY,
+  Indirect,
+  IndexedIndirect,
+  IndirectIndexed
+};
+
+enum class Operation {
+  ADC,
+  AND,
+  ASL,
+  BCC,
+  BCS,
+  BEQ,
+  BIT,
+  BMI,
+  BNE,
+  BPL,
+  BRK,
+  BVC,
+  BVS,
+  CLC,
+  CLD,
+  CLI,
+  CLV,
+  CMP,
+  CPX,
+  CPY,
+  DEC,
+  DEX,
+  DEY,
+  EOR,
+  INC,
+  INX,
+  INY,
+  JMP,
+  JSR,
+  LDA,
+  LDX,
+  LDY,
+  LSR,
+  NOP,
+  ORA,
+  PHA,
+  PHP,
+  PLA,
+  PLP,
+  ROL,
+  ROR,
+  RTI,
+  RTS,
+  SBC,
+  SEC,
+  SED,
+  SEI,
+  STA,
+  STX,
+  STY,
+  TAX,
+  TAY,
+  TSX,
+  TXA,
+  TXS,
+  TYA
+};
+
 class CPU {
 public:
-  enum class AddressingMode {
-    Implied,
-    Accumulator,
-    Immediate,
-    ZeroPage,
-    ZeroPageX,
-    ZeroPageY,
-    Relative,
-    Absolute,
-    AbsoluteX,
-    AbsoluteY,
-    Indirect,
-    IndexedIndirect,
-    IndirectIndexed
-  };
-  enum class Operation {
-    ADC,
-    AND,
-    ASL,
-    BCC,
-    BCS,
-    BEQ,
-    BIT,
-    BMI,
-    BNE,
-    BPL,
-    BRK,
-    BVC,
-    BVS,
-    CLC,
-    CLD,
-    CLI,
-    CLV,
-    CMP,
-    CPX,
-    CPY,
-    DEC,
-    DEX,
-    DEY,
-    EOR,
-    INC,
-    INX,
-    INY,
-    JMP,
-    JSR,
-    LDA,
-    LDX,
-    LDY,
-    LSR,
-    NOP,
-    ORA,
-    PHA,
-    PHP,
-    PLA,
-    PLP,
-    ROL,
-    ROR,
-    RTI,
-    RTS,
-    SBC,
-    SEC,
-    SED,
-    SEI,
-    STA,
-    STX,
-    STY,
-    TAX,
-    TAY,
-    TSX,
-    TXA,
-    TXS,
-    TYA
-  };
-
-  CPU() = default;
+  CPU(double clockSpeedHz = 1789773) : clockSpeedHz_(clockSpeedHz){};
   ~CPU() = default;
 
   void reset();
   void step();
-  // template <typename T> 
-  void run(std::vector<std::string> program, const char mode = 'b');
-
+  // template <typename T>
+  void run(uint64_t targetCycles);
   AddressingMode detectAddressingMode(const std::string &instruction);
+
+  // Memory Access
+  Byte read(Word address) const { return memory_[address]; }
+  void write(Word address, Byte value) { memory_[address] = value; }
+
+  // Cycle counting
+  uint64_t cycles_;
+  double clockSpeedHz_;
+  std::chrono::high_resolution_clock::time_point lastCycleTime_;
+
+  // Instruction control
+  struct Instruction {
+    Byte opcode;
+    Operation mnemonic;
+    std::uint32_t cycles;
+    AddressingMode mode;
+    bool needsExtraCycle;
+
+    Instruction(Byte op, Operation mn, std::uint32_t cyc, AddressingMode m,
+                bool ec)
+        : opcode(op), mnemonic(mn), cycles(cyc), mode(m), needsExtraCycle(ec) {}
+
+    Instruction()
+        : opcode(0), mnemonic(), cycles(0), mode(AddressingMode::Implied),
+          needsExtraCycle(false) {}
+  };
+
+  // Helper Tables
+  std::unordered_map<Byte, Instruction> opcodeTable_;
+  std::unordered_map<Operation, std::vector<Instruction>> operationTable_;
 
 private:
   static constexpr std::size_t MAX_MEMORY = 64 * 1024; // 64KB
@@ -129,50 +156,11 @@ private:
     }
   };
 
-  struct Instruction {
-    Byte opcode;
-    Operation mnemonic;
-    std::uint32_t cycles;
-    AddressingMode mode;
-
-    Instruction(Byte op, Operation mn, std::uint32_t cyc, AddressingMode m)
-        : opcode(op), mnemonic(mn), cycles(cyc), mode(m) {}
-
-    Instruction()
-        : opcode(0), mnemonic(), cycles(0), mode(AddressingMode::Implied) {}
-  };
-
-  struct InstructionKey {
-    Operation mnemonic;
-    AddressingMode mode;
-
-    bool operator==(const InstructionKey &other) const {
-      return mnemonic == other.mnemonic && mode == other.mode;
-    }
-  };
-
-  struct InstructionKeyHash {
-    std::size_t operator()(const InstructionKey &key) const {
-      std::size_t h1 = std::hash<int>{}(static_cast<int>(key.mnemonic));
-      std::size_t h2 = std::hash<int>{}(static_cast<int>(key.mode));
-      return h1 ^ (h2 << 1); // or use boost::hash_combine
-    }
-  };
-
+  // Registers
   Registers registers_;
+
+  //  Memory
   std::array<Byte, MAX_MEMORY> memory_;
-  std::unordered_map<Byte, Instruction> opcodeTable_;
-  std::unordered_map<InstructionKey, Instruction, InstructionKeyHash>
-      translationTable_;
-  std::unordered_map<Operation, std::vector<Instruction>> operationTable_;
-
-  // Memory Access
-  Byte read(Word address) const { return memory_[address]; }
-  void write(Word address, Byte value) { memory_[address] = value; }
-
-  // Cycle counting
-  std::uint64_t totalCycles = 0;
-  void addCycles(std::uint32_t cycles) { totalCycles += cycles; }
 
   // Combined operation functions
   void LDA(const Instruction &instruction);
@@ -234,19 +222,11 @@ private:
 
   void initializeTables();
 
-  // Helper functions
+  // Operations
   Byte fetchOperand(AddressingMode mode);
   Word fetchAddress(AddressingMode mode);
   void updateZeroAndNegativeFlags(Byte value);
-  std::vector<std::string> disassemble(const std::vector<uint8_t> &code);
-  std::string mnemonicToString(Operation mnemonic);
-  std::string byteToHex(uint8_t byte);
-  std::string wordToHex(uint16_t word);
-  std::vector<uint8_t> assemble(const std::vector<std::string> &code);
-  Operation stringToMnemonic(const std::string &str);
-  bool matchAddressingMode(const std::string &operand, AddressingMode mode);
-  uint16_t parseOperand(const std::string &operand, AddressingMode mode);
-  bool isLabel(const std::string &operand);
+  void handlePageCrossing(const Instruction &instruction);
 };
 
 } // namespace m6502

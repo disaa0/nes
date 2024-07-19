@@ -1,15 +1,14 @@
-#include <algorithm>
-#include <cctype>
-#include <cstdint>
-#include <iomanip>
-#include <iostream>
 #include <m6502.h>
-#include <sstream>
-#include <stdexcept>
 #include <string>
-#include <vector>
 
-namespace m6502 {
+using namespace nes;
+
+void CPU::run(uint64_t targetCycles) {
+  uint64_t endCycles = cycles_ + targetCycles;
+  while (cycles_ < endCycles) {
+    step();
+  }
+}
 
 void CPU::reset() {
   registers_.reset();
@@ -28,7 +27,12 @@ void CPU::step() {
   }
   const Instruction &instruction = it->second;
 
-  // Use a switch statement instead of a map for better performance
+  cycles_ += instruction.cycles;
+
+  if (instruction.needsExtraCycle) {
+    handlePageCrossing(instruction);
+  }
+
   switch (instruction.mnemonic) {
   case Operation::ADC:
     ADC(instruction);
@@ -202,342 +206,6 @@ void CPU::step() {
     throw std::runtime_error("Unimplemented instruction");
   }
 }
-// template <typename T>
-void CPU::run(const std::vector<std::string> program, const char mode) {
-  reset();
-  if (mode == 'a') {
-    std::vector<uint8_t> code = assemble(program);
-    // Print each string in the vector
-    for (const auto &byte : code) {
-      std::cout << byteToHex(byte) << " ";
-    }
-    std::cout << std::endl;
-  }
-  // else {
-  //   for (Byte i = 0; i < sizeof(program); ++i) {
-  //     write(i + 0x0200, program[i]);
-  //   }
-  // }
-
-  while (true) {
-    step();
-    // Add any necessary break conditions
-  }
-}
-
-std::string CPU::byteToHex(uint8_t byte) {
-  std::stringstream ss;
-  ss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(byte);
-  return ss.str();
-}
-
-std::string CPU::wordToHex(uint16_t word) {
-  std::stringstream ss;
-  ss << std::setw(4) << std::setfill('0') << std::hex << word;
-  return ss.str();
-}
-
-std::vector<std::string> CPU::disassemble(const std::vector<uint8_t> &code) {
-  std::vector<std::string> disassembled_code;
-  uint16_t pc = 0;
-  std::string current_section;
-
-  while (pc < code.size()) {
-    std::stringstream line;
-    // line << std::setfill('0') << std::setw(4) << std::hex << pc << "  ";
-
-    // Check for comments or section markers
-    if (code[pc] == 0xFF) {
-      pc++;
-      if (pc < code.size() && code[pc] == 0xFF) {
-        // Section marker
-        pc++;
-        current_section = "";
-        while (pc < code.size() && code[pc] != 0x00) {
-          current_section += static_cast<char>(code[pc]);
-          pc++;
-        }
-        pc++; // Skip the null terminator
-        line << "; Section: " << current_section;
-        disassembled_code.push_back(line.str());
-        continue;
-      } else {
-        // Comment
-        std::string comment;
-        while (pc < code.size() && code[pc] != 0x00) {
-          comment += static_cast<char>(code[pc]);
-          pc++;
-        }
-        pc++; // Skip the null terminator
-        line << "; " << comment;
-        disassembled_code.push_back(line.str());
-        continue;
-      }
-    }
-
-    uint8_t opcode = code[pc++];
-    auto it = opcodeTable_.find(opcode);
-    if (it == opcodeTable_.end()) {
-      throw std::runtime_error("Unknown opcode: " + std::to_string(opcode));
-    }
-
-    const Instruction &instruction = it->second;
-    // line << std::setw(2) << std::hex << static_cast<int>(opcode) << "  ";
-    line << mnemonicToString(instruction.mnemonic) << " ";
-
-    std::string operand;
-    uint16_t address;
-
-    switch (instruction.mode) {
-    case AddressingMode::Immediate:
-      operand = "#$" + byteToHex(code[pc++]);
-      break;
-    case AddressingMode::ZeroPage:
-      operand = "$" + byteToHex(code[pc++]);
-      break;
-    case AddressingMode::ZeroPageX:
-      operand = "$" + byteToHex(code[pc++]) + ",X";
-      break;
-    case AddressingMode::ZeroPageY:
-      operand = "$" + byteToHex(code[pc++]) + ",Y";
-      break;
-    case AddressingMode::Absolute:
-      address = (code[pc + 1] << 8) | code[pc];
-      operand = "$" + wordToHex(address);
-      pc += 2;
-      break;
-    case AddressingMode::AbsoluteX:
-      address = (code[pc + 1] << 8) | code[pc];
-      operand = "$" + wordToHex(address) + ",X";
-      pc += 2;
-      break;
-    case AddressingMode::AbsoluteY:
-      address = (code[pc + 1] << 8) | code[pc];
-      operand = "$" + wordToHex(address) + ",Y";
-      pc += 2;
-      break;
-    case AddressingMode::Indirect:
-      address = (code[pc + 1] << 8) | code[pc];
-      operand = "($" + wordToHex(address) + ")";
-      pc += 2;
-      break;
-    case AddressingMode::IndexedIndirect:
-      operand = "($" + byteToHex(code[pc++]) + ",X)";
-      break;
-    case AddressingMode::IndirectIndexed:
-      operand = "($" + byteToHex(code[pc++]) + "),Y";
-      break;
-    case AddressingMode::Relative: {
-      int8_t offset = static_cast<int8_t>(code[pc++]);
-      uint16_t target = pc + offset;
-      operand = "$" + wordToHex(target);
-    } break;
-    case AddressingMode::Implied:
-    case AddressingMode::Accumulator:
-      // No operand needed
-      break;
-    }
-
-    line << std::setw(10) << std::left << operand;
-    // line << "  ; " << instruction.cycles << " cycles";
-
-    disassembled_code.push_back(line.str());
-  }
-
-  return disassembled_code;
-}
-
-CPU::Operation CPU::stringToMnemonic(const std::string &str) {
-  static const std::unordered_map<std::string, Operation> mnemonicMap = {
-      {"ADC", Operation::ADC}, {"AND", Operation::AND}, {"ASL", Operation::ASL},
-      {"BCC", Operation::BCC}, {"BCS", Operation::BCS}, {"BEQ", Operation::BEQ},
-      {"BIT", Operation::BIT}, {"BMI", Operation::BMI}, {"BNE", Operation::BNE},
-      {"BPL", Operation::BPL}, {"BRK", Operation::BRK}, {"BVC", Operation::BVC},
-      {"BVS", Operation::BVS}, {"CLC", Operation::CLC}, {"CLD", Operation::CLD},
-      {"CLI", Operation::CLI}, {"CLV", Operation::CLV}, {"CMP", Operation::CMP},
-      {"CPX", Operation::CPX}, {"CPY", Operation::CPY}, {"DEC", Operation::DEC},
-      {"DEX", Operation::DEX}, {"DEY", Operation::DEY}, {"EOR", Operation::EOR},
-      {"INC", Operation::INC}, {"INX", Operation::INX}, {"INY", Operation::INY},
-      {"JMP", Operation::JMP}, {"JSR", Operation::JSR}, {"LDA", Operation::LDA},
-      {"LDX", Operation::LDX}, {"LDY", Operation::LDY}, {"LSR", Operation::LSR},
-      {"NOP", Operation::NOP}, {"ORA", Operation::ORA}, {"PHA", Operation::PHA},
-      {"PHP", Operation::PHP}, {"PLA", Operation::PLA}, {"PLP", Operation::PLP},
-      {"ROL", Operation::ROL}, {"ROR", Operation::ROR}, {"RTI", Operation::RTI},
-      {"RTS", Operation::RTS}, {"SBC", Operation::SBC}, {"SEC", Operation::SEC},
-      {"SED", Operation::SED}, {"SEI", Operation::SEI}, {"STA", Operation::STA},
-      {"STX", Operation::STX}, {"STY", Operation::STY}, {"TAX", Operation::TAX},
-      {"TAY", Operation::TAY}, {"TSX", Operation::TSX}, {"TXA", Operation::TXA},
-      {"TXS", Operation::TXS}, {"TYA", Operation::TYA}};
-
-  auto it = mnemonicMap.find(str);
-  if (it != mnemonicMap.end()) {
-    return it->second;
-  }
-  throw std::runtime_error("Unknown mnemonic: " + str);
-}
-
-bool CPU::matchAddressingMode(const std::string &operand, AddressingMode mode) {
-  switch (mode) {
-  case AddressingMode::Implied:
-  case AddressingMode::Accumulator:
-    return operand.empty() || operand == "A";
-  case AddressingMode::Immediate:
-    return operand.size() > 1 && operand[0] == '#';
-  case AddressingMode::ZeroPage:
-    return operand.size() <= 3 && operand[0] != '#' &&
-           operand.find(',') == std::string::npos;
-  case AddressingMode::ZeroPageX:
-    return operand.size() > 2 && operand.back() == 'X' &&
-           operand.find(',') != std::string::npos;
-  case AddressingMode::ZeroPageY:
-    return operand.size() > 2 && operand.back() == 'Y' &&
-           operand.find(',') != std::string::npos;
-  case AddressingMode::Absolute:
-    return operand.size() > 3 && operand[0] != '#' &&
-           operand.find(',') == std::string::npos;
-  case AddressingMode::AbsoluteX:
-    return operand.size() > 4 && operand.back() == 'X' &&
-           operand.find(',') != std::string::npos;
-  case AddressingMode::AbsoluteY:
-    return operand.size() > 4 && operand.back() == 'Y' &&
-           operand.find(',') != std::string::npos;
-  case AddressingMode::Indirect:
-    return operand.size() > 4 && operand.front() == '(' &&
-           operand.back() == ')';
-  case AddressingMode::IndexedIndirect:
-    return operand.size() > 5 && operand.front() == '(' &&
-           operand.find(",X)") != std::string::npos;
-  case AddressingMode::IndirectIndexed:
-    return operand.size() > 5 && operand.front() == '(' &&
-           operand.find("),Y") != std::string::npos;
-  case AddressingMode::Relative:
-    return true; // All operands could potentially be relative (label or offset)
-  default:
-    return false;
-  }
-}
-
-uint16_t CPU::parseOperand(const std::string &operand, AddressingMode mode) {
-  std::string value = operand;
-  if (mode == AddressingMode::Immediate) {
-    value = value.substr(1);
-  }
-  if (value.front() == '$') {
-    return std::stoul(value.substr(1), nullptr, 16);
-  }
-  if (std::isdigit(value.front())) {
-    return std::stoul(value);
-  }
-  throw std::runtime_error("Invalid operand format: " + operand);
-}
-
-bool CPU::isLabel(const std::string &operand) {
-  return std::all_of(operand.begin(), operand.end(),
-                     [](char c) { return std::isalnum(c) || c == '_'; });
-}
-
-std::vector<uint8_t> CPU::assemble(const std::vector<std::string> &code) {
-  std::vector<uint8_t> binary;
-  std::unordered_map<std::string, uint16_t> labels;
-  std::vector<std::pair<size_t, std::string>> unresolved_labels;
-
-  // First pass: collect labels and assemble known instructions
-  uint16_t address = 0;
-  for (const auto &line : code) {
-    std::istringstream iss(line);
-    std::string token;
-    iss >> token;
-
-    // Handle comments
-    if (token.empty() || token[0] == ';') {
-      continue;
-    }
-
-    // Handle labels
-    if (token.back() == ':') {
-      labels[token.substr(0, token.length() - 1)] = address;
-      continue;
-    }
-
-    // Handle sections
-    if (token == ".section") {
-      std::string section_name;
-      iss >> section_name;
-      binary.push_back(0xFF);
-      binary.push_back(0xFF);
-      for (char c : section_name) {
-        binary.push_back(static_cast<uint8_t>(c));
-      }
-      binary.push_back(0x00);
-      continue;
-    }
-
-    // Handle instructions
-    Operation op = stringToMnemonic(token);
-    auto it = operationTable_.find(op);
-    if (it == operationTable_.end()) {
-      throw std::runtime_error("Unknown mnemonic: " + token);
-    }
-
-    const auto &instructions = it->second;
-    std::string operand;
-    std::getline(iss, operand);
-    operand.erase(0, operand.find_first_not_of(" \t"));
-    operand.erase(operand.find_last_not_of(" \t") + 1);
-
-    bool found = false;
-    for (const auto &instr : instructions) {
-      if (matchAddressingMode(operand, instr.mode)) {
-        binary.push_back(instr.opcode);
-        address++;
-        found = true;
-
-        if (instr.mode != AddressingMode::Implied &&
-            instr.mode != AddressingMode::Accumulator) {
-          if (isLabel(operand)) {
-            unresolved_labels.emplace_back(binary.size(), operand);
-            binary.push_back(0);
-            binary.push_back(0);
-            address += 2;
-          } else {
-            uint16_t value = parseOperand(operand, instr.mode);
-            if (instr.mode == AddressingMode::Immediate ||
-                instr.mode == AddressingMode::ZeroPage ||
-                instr.mode == AddressingMode::ZeroPageX ||
-                instr.mode == AddressingMode::ZeroPageY ||
-                instr.mode == AddressingMode::IndexedIndirect ||
-                instr.mode == AddressingMode::IndirectIndexed) {
-              binary.push_back(value & 0xFF);
-              address++;
-            } else {
-              binary.push_back(value & 0xFF);
-              binary.push_back((value >> 8) & 0xFF);
-              address += 2;
-            }
-          }
-        }
-        break;
-      }
-    }
-
-    if (!found) {
-      throw std::runtime_error("Invalid addressing mode for mnemonic: " +
-                               token);
-    }
-  }
-
-  // Second pass: resolve labels
-  for (const auto &[pos, label] : unresolved_labels) {
-    if (labels.find(label) == labels.end()) {
-      throw std::runtime_error("Undefined label: " + label);
-    }
-    uint16_t value = labels[label];
-    binary[pos] = value & 0xFF;
-    binary[pos + 1] = (value >> 8) & 0xFF;
-  }
-
-  return binary;
-}
 
 // Combined operation functions
 // Load/Store Operations
@@ -670,6 +338,7 @@ void CPU::ADC(const Instruction &instruction) {
   registers_.P.C = result > 0xFF;
   registers_.P.V = ((registers_.A ^ result) & (value ^ result) & 0x80) != 0;
   registers_.A = result & 0xFF;
+
   updateZeroAndNegativeFlags(registers_.A);
 }
 
@@ -949,14 +618,14 @@ void CPU::RTI(const Instruction &instruction) {
 
 void CPU::initializeTables() {
   auto addInstruction = [this](Byte opcode, const Operation &mnemonic,
-                               std::uint32_t cycles, AddressingMode mode) {
-    Instruction inst{opcode, mnemonic, cycles, mode};
+                               std::uint32_t cycles, AddressingMode mode,
+                               bool ec = false) {
+    Instruction inst{opcode, mnemonic, cycles, mode, ec};
     opcodeTable_[opcode] = inst;
-    translationTable_[InstructionKey{mnemonic, mode}] = inst;
     if (operationTable_.find(mnemonic) == operationTable_.end()) {
-      operationTable_[mnemonic] = std::vector<Instruction>(); 
+      operationTable_[mnemonic] = std::vector<Instruction>();
     }
-    operationTable_[mnemonic].push_back(inst); 
+    operationTable_[mnemonic].push_back(inst);
   };
 
   Operation op;
@@ -967,10 +636,10 @@ void CPU::initializeTables() {
   addInstruction(0x65, op, 3, AddressingMode::ZeroPage);
   addInstruction(0x75, op, 4, AddressingMode::ZeroPageX);
   addInstruction(0x6D, op, 4, AddressingMode::Absolute);
-  addInstruction(0x7D, op, 4, AddressingMode::AbsoluteX);
-  addInstruction(0x79, op, 4, AddressingMode::AbsoluteY);
+  addInstruction(0x7D, op, 4, AddressingMode::AbsoluteX, true);
+  addInstruction(0x79, op, 4, AddressingMode::AbsoluteY, true);
   addInstruction(0x61, op, 6, AddressingMode::IndexedIndirect);
-  addInstruction(0x71, op, 5, AddressingMode::IndirectIndexed);
+  addInstruction(0x71, op, 5, AddressingMode::IndirectIndexed, true);
 
   // AND (Logical AND)
   op = Operation::AND;
@@ -978,10 +647,10 @@ void CPU::initializeTables() {
   addInstruction(0x25, op, 3, AddressingMode::ZeroPage);
   addInstruction(0x35, op, 4, AddressingMode::ZeroPageX);
   addInstruction(0x2D, op, 4, AddressingMode::Absolute);
-  addInstruction(0x3D, op, 4, AddressingMode::AbsoluteX);
-  addInstruction(0x39, op, 4, AddressingMode::AbsoluteY);
+  addInstruction(0x3D, op, 4, AddressingMode::AbsoluteX, true);
+  addInstruction(0x39, op, 4, AddressingMode::AbsoluteY, true);
   addInstruction(0x21, op, 6, AddressingMode::IndexedIndirect);
-  addInstruction(0x31, op, 5, AddressingMode::IndirectIndexed);
+  addInstruction(0x31, op, 5, AddressingMode::IndirectIndexed, true);
 
   // ASL (Arithmetic Shift Left)
   op = Operation::ASL;
@@ -1054,10 +723,10 @@ void CPU::initializeTables() {
   addInstruction(0xC5, op, 3, AddressingMode::ZeroPage);
   addInstruction(0xD5, op, 4, AddressingMode::ZeroPageX);
   addInstruction(0xCD, op, 4, AddressingMode::Absolute);
-  addInstruction(0xDD, op, 4, AddressingMode::AbsoluteX);
-  addInstruction(0xD9, op, 4, AddressingMode::AbsoluteY);
+  addInstruction(0xDD, op, 4, AddressingMode::AbsoluteX, true);
+  addInstruction(0xD9, op, 4, AddressingMode::AbsoluteY, true);
   addInstruction(0xC1, op, 6, AddressingMode::IndexedIndirect);
-  addInstruction(0xD1, op, 5, AddressingMode::IndirectIndexed);
+  addInstruction(0xD1, op, 5, AddressingMode::IndirectIndexed, true);
 
   // CPX (Compare X Register)
   op = Operation::CPX;
@@ -1092,10 +761,10 @@ void CPU::initializeTables() {
   addInstruction(0x45, op, 3, AddressingMode::ZeroPage);
   addInstruction(0x55, op, 4, AddressingMode::ZeroPageX);
   addInstruction(0x4D, op, 4, AddressingMode::Absolute);
-  addInstruction(0x5D, op, 4, AddressingMode::AbsoluteX);
-  addInstruction(0x59, op, 4, AddressingMode::AbsoluteY);
+  addInstruction(0x5D, op, 4, AddressingMode::AbsoluteX, true);
+  addInstruction(0x59, op, 4, AddressingMode::AbsoluteY, true);
   addInstruction(0x41, op, 6, AddressingMode::IndexedIndirect);
-  addInstruction(0x51, op, 5, AddressingMode::IndirectIndexed);
+  addInstruction(0x51, op, 5, AddressingMode::IndirectIndexed, true);
 
   // INC (Increment Memory)
   op = Operation::INC;
@@ -1127,10 +796,10 @@ void CPU::initializeTables() {
   addInstruction(0xA5, op, 3, AddressingMode::ZeroPage);
   addInstruction(0xB5, op, 4, AddressingMode::ZeroPageX);
   addInstruction(0xAD, op, 4, AddressingMode::Absolute);
-  addInstruction(0xBD, op, 4, AddressingMode::AbsoluteX);
-  addInstruction(0xB9, op, 4, AddressingMode::AbsoluteY);
+  addInstruction(0xBD, op, 4, AddressingMode::AbsoluteX, true);
+  addInstruction(0xB9, op, 4, AddressingMode::AbsoluteY, true);
   addInstruction(0xA1, op, 6, AddressingMode::IndexedIndirect);
-  addInstruction(0xB1, op, 5, AddressingMode::IndirectIndexed);
+  addInstruction(0xB1, op, 5, AddressingMode::IndirectIndexed, true);
 
   // LDX (Load X Register)
   op = Operation::LDX;
@@ -1138,7 +807,7 @@ void CPU::initializeTables() {
   addInstruction(0xA6, op, 3, AddressingMode::ZeroPage);
   addInstruction(0xB6, op, 4, AddressingMode::ZeroPageY);
   addInstruction(0xAE, op, 4, AddressingMode::Absolute);
-  addInstruction(0xBE, op, 4, AddressingMode::AbsoluteY);
+  addInstruction(0xBE, op, 4, AddressingMode::AbsoluteY, true);
 
   // LDY (Load Y Register)
   op = Operation::LDY;
@@ -1146,7 +815,7 @@ void CPU::initializeTables() {
   addInstruction(0xA4, op, 3, AddressingMode::ZeroPage);
   addInstruction(0xB4, op, 4, AddressingMode::ZeroPageX);
   addInstruction(0xAC, op, 4, AddressingMode::Absolute);
-  addInstruction(0xBC, op, 4, AddressingMode::AbsoluteX);
+  addInstruction(0xBC, op, 4, AddressingMode::AbsoluteX, true);
 
   // LSR (Logical Shift Right)
   op = Operation::LSR;
@@ -1166,10 +835,10 @@ void CPU::initializeTables() {
   addInstruction(0x05, op, 3, AddressingMode::ZeroPage);
   addInstruction(0x15, op, 4, AddressingMode::ZeroPageX);
   addInstruction(0x0D, op, 4, AddressingMode::Absolute);
-  addInstruction(0x1D, op, 4, AddressingMode::AbsoluteX);
-  addInstruction(0x19, op, 4, AddressingMode::AbsoluteY);
+  addInstruction(0x1D, op, 4, AddressingMode::AbsoluteX, true);
+  addInstruction(0x19, op, 4, AddressingMode::AbsoluteY, true);
   addInstruction(0x01, op, 6, AddressingMode::IndexedIndirect);
-  addInstruction(0x11, op, 5, AddressingMode::IndirectIndexed);
+  addInstruction(0x11, op, 5, AddressingMode::IndirectIndexed, true);
 
   // PHA (Push Accumulator)
   op = Operation::PHA;
@@ -1217,10 +886,10 @@ void CPU::initializeTables() {
   addInstruction(0xE5, op, 3, AddressingMode::ZeroPage);
   addInstruction(0xF5, op, 4, AddressingMode::ZeroPageX);
   addInstruction(0xED, op, 4, AddressingMode::Absolute);
-  addInstruction(0xFD, op, 4, AddressingMode::AbsoluteX);
-  addInstruction(0xF9, op, 4, AddressingMode::AbsoluteY);
+  addInstruction(0xFD, op, 4, AddressingMode::AbsoluteX, true);
+  addInstruction(0xF9, op, 4, AddressingMode::AbsoluteY, true);
   addInstruction(0xE1, op, 6, AddressingMode::IndexedIndirect);
-  addInstruction(0xF1, op, 5, AddressingMode::IndirectIndexed);
+  addInstruction(0xF1, op, 5, AddressingMode::IndirectIndexed, true);
 
   // SEC (Set Carry Flag)
   op = Operation::SEC;
@@ -1302,6 +971,7 @@ Byte CPU::fetchOperand(AddressingMode mode) {
     return read((read(registers_.PC++) + registers_.Y) & 0xFF);
 
   case AddressingMode::Relative:
+    cycles_++; // branch succeeds
     return read(registers_.PC++);
 
   case AddressingMode::Absolute: {
@@ -1311,6 +981,7 @@ Byte CPU::fetchOperand(AddressingMode mode) {
 
   case AddressingMode::AbsoluteX: {
     Word address = read(registers_.PC++) | (read(registers_.PC++) << 8);
+
     return read(address + registers_.X);
   }
 
@@ -1344,7 +1015,6 @@ Byte CPU::fetchOperand(AddressingMode mode) {
     throw std::runtime_error("Unimplemented addressing mode");
   }
 }
-
 Word CPU::fetchAddress(AddressingMode mode) {
   switch (mode) {
   case AddressingMode::Implied:
@@ -1412,123 +1082,22 @@ void CPU::updateZeroAndNegativeFlags(Byte value) {
   registers_.P.N = (value & 0x80) != 0;
 }
 
-std::string CPU::mnemonicToString(Operation mnemonic) {
-  switch (mnemonic) {
-  case Operation::ADC:
-    return "ADC";
-  case Operation::AND:
-    return "AND";
-  case Operation::ASL:
-    return "ASL";
-  case Operation::BCC:
-    return "BCC";
-  case Operation::BCS:
-    return "BCS";
-  case Operation::BEQ:
-    return "BEQ";
-  case Operation::BIT:
-    return "BIT";
-  case Operation::BMI:
-    return "BMI";
-  case Operation::BNE:
-    return "BNE";
-  case Operation::BPL:
-    return "BPL";
-  case Operation::BRK:
-    return "BRK";
-  case Operation::BVC:
-    return "BVC";
-  case Operation::BVS:
-    return "BVS";
-  case Operation::CLC:
-    return "CLC";
-  case Operation::CLD:
-    return "CLD";
-  case Operation::CLI:
-    return "CLI";
-  case Operation::CLV:
-    return "CLV";
-  case Operation::CMP:
-    return "CMP";
-  case Operation::CPX:
-    return "CPX";
-  case Operation::CPY:
-    return "CPY";
-  case Operation::DEC:
-    return "DEC";
-  case Operation::DEX:
-    return "DEX";
-  case Operation::DEY:
-    return "DEY";
-  case Operation::EOR:
-    return "EOR";
-  case Operation::INC:
-    return "INC";
-  case Operation::INX:
-    return "INX";
-  case Operation::INY:
-    return "INY";
-  case Operation::JMP:
-    return "JMP";
-  case Operation::JSR:
-    return "JSR";
-  case Operation::LDA:
-    return "LDA";
-  case Operation::LDX:
-    return "LDX";
-  case Operation::LDY:
-    return "LDY";
-  case Operation::LSR:
-    return "LSR";
-  case Operation::NOP:
-    return "NOP";
-  case Operation::ORA:
-    return "ORA";
-  case Operation::PHA:
-    return "PHA";
-  case Operation::PHP:
-    return "PHP";
-  case Operation::PLA:
-    return "PLA";
-  case Operation::PLP:
-    return "PLP";
-  case Operation::ROL:
-    return "ROL";
-  case Operation::ROR:
-    return "ROR";
-  case Operation::RTI:
-    return "RTI";
-  case Operation::RTS:
-    return "RTS";
-  case Operation::SBC:
-    return "SBC";
-  case Operation::SEC:
-    return "SEC";
-  case Operation::SED:
-    return "SED";
-  case Operation::SEI:
-    return "SEI";
-  case Operation::STA:
-    return "STA";
-  case Operation::STX:
-    return "STX";
-  case Operation::STY:
-    return "STY";
-  case Operation::TAX:
-    return "TAX";
-  case Operation::TAY:
-    return "TAY";
-  case Operation::TSX:
-    return "TSX";
-  case Operation::TXA:
-    return "TXA";
-  case Operation::TXS:
-    return "TXS";
-  case Operation::TYA:
-    return "TYA";
-  default:
-    throw std::runtime_error("Unknown operation");
+void CPU::handlePageCrossing(const Instruction &instruction) {
+  Word baseAddress = fetchAddress(instruction.mode);
+  registers_.PC--;
+  Byte finalAddress{0};
+  switch (instruction.mode) {
+  case AddressingMode::AbsoluteX:
+    finalAddress = read(baseAddress + registers_.X);
+    break;
+  case AddressingMode::AbsoluteY:
+    finalAddress = read(baseAddress + registers_.Y);
+    break;
+  case AddressingMode::IndirectIndexed:
+    finalAddress = read(baseAddress + registers_.Y);
+  }
+  if ((baseAddress & 0xFF00) != (finalAddress & 0xFF00)) {
+    // Page boundary crossed, add an extra cycle
+    cycles_++;
   }
 }
-
-} // namespace m6502

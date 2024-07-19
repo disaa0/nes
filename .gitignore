@@ -7,6 +7,7 @@
 CMakeUserPresets.json
 compile_commands.json
 *_old*
+*.nes
 
 
 ################################
@@ -16,8 +17,7 @@ build/
 html/
 .cache/
 .vscode/
-main/
-
+output/
 
 ################################
 ############ C/C++ #############
