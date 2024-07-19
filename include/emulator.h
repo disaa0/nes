@@ -1,25 +1,33 @@
 #pragma once
 #include "cartrige.h"
-#include <debugger.h>
 #include <bus.h>
+#include <debugger.h>
 #include <m6502.h>
 #include <memory>
 
+namespace nes {
+
 class Emulator {
 public:
-  Emulator(std::shared_ptr<nes::CPU> cpu)
-      : cpu_(cpu), debugger_(std::make_shared<nes::Debugger>(cpu)) {}
+  Emulator() {}
   ~Emulator() {}
 
-  void run(const std::vector<std::string> program, const uint64_t targetCycles,
-           const char mode);
+  void run(const uint64_t targetCycles);
 
 private:
-  std::shared_ptr<nes::CPU> cpu_;           // Shared pointer to the CPU
-  std::shared_ptr<nes::Debugger> debugger_; // Shared pointer to the debugger
-  std::shared_ptr<nes::Bus> bus_;           // Shared pointer to the Bus
+  std::shared_ptr<nes::Bus> bus_ =
+      std::make_shared<nes::Bus>(); // Shared pointer to the Bus
+
+  std::shared_ptr<nes::CPU> cpu_ =
+      std::make_shared<nes::CPU>(bus_); // Shared pointer to the Bus
+    
+  nes::Debugger debugger_ = nes::Debugger(cpu_);
+
   nes::Cartridge cartridge_;
 
   static constexpr uint64_t CYCLES_PER_FRAME = 29780;
   void synchronizeWithRealTime();
+  void mapDevices();
 };
+
+} // namespace nes

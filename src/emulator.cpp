@@ -1,57 +1,21 @@
+#include "bus.h"
 #include <cartrige.h>
 #include <emulator.h>
 #include <iostream>
 #include <m6502.h>
 #include <thread>
 
-#include <fstream>
-
 using namespace nes;
 
-void Emulator::run(const std::vector<std::string> program,
-                   const uint64_t targetCycles, const char mode) {
+void Emulator::run(const uint64_t targetCycles) {
+  mapDevices();
   cpu_->reset();
-
-  // if (mode == 'a') {
-  //   std::vector<uint8_t> code = debugger_->assemble(program);
-
-  //   std::ofstream file("test.nes", std::ios::binary);
-
-  //   if (!file.is_open()) {
-  //     std::cerr << "Error opening file for writing." << std::endl;
-  //     return;
-  //   }
-
-  //   // Write the data to the file
-  //   file.write(reinterpret_cast<char *>(code.data()),
-  //              code.size() * sizeof(int));
-
-  //   // Close the file
-  //   file.close();
-
-  //   std::cout << "Data written" << std::endl;
-
+  
   try {
     cartridge_.loadROM("nestest.nes");
   } catch (const std::exception &e) {
     std::cerr << "Error loading ROM: " << e.what() << std::endl;
   }
-  // // Print each string in the vector
-  // for (Byte i = 0; i < program.size(); i++) {
-  //   std::cout << program.at(i) << "\n";
-  //   cpu_->write(i + 0x0200, code.at(i));
-  // }
-  // for (Byte i = 0; i < code.size(); i++) {
-  //   std::cout << debugger_->byteToHex(code.at(i)) << " ";
-  //   cpu_->write(i + 0x0200, code.at(i));
-  // }
-  // std::cout << std::endl;
-  // }
-  // else {
-  //   for (Byte i = 0; i < sizeof(program); ++i) {
-  //     write(i + 0x0200, program[i]);
-  //   }
-  // }
 
   while (true) {
     cpu_->run(targetCycles);
@@ -72,4 +36,9 @@ void Emulator::synchronizeWithRealTime() {
   }
 
   lastFrameTime = std::chrono::high_resolution_clock::now();
+}
+
+void Emulator::mapDevices() {
+  RAM ram = RAM(0x800);
+  bus_->mapDevice(&ram, 0x0000, 0x07FF);
 }

@@ -12,15 +12,15 @@ void CPU::run(uint64_t targetCycles) {
 
 void CPU::reset() {
   registers_.reset();
-  memory_.fill(0);
-  memory_[0xFFFC] = 0x00;
-  memory_[0xFFFD] = 0x02;
+  // memory_.fill(0);
+  // memory_[0xFFFC] = 0x00;
+  // memory_[0xFFFD] = 0x02;
   initializeTables();
-  registers_.PC = read(0xFFFC) | (read(0xFFFD) << 8);
+  registers_.PC = bus_->read(0xFFFC) | (bus_->read(0xFFFD) << 8);
 }
 
 void CPU::step() {
-  Byte opcode = read(registers_.PC++);
+  Byte opcode = bus_->read(registers_.PC++);
   auto it = opcodeTable_.find(opcode);
   if (it == opcodeTable_.end()) {
     throw std::runtime_error("Unknown opcode: " + std::to_string(opcode));
@@ -229,17 +229,17 @@ void CPU::LDY(const Instruction &instruction) {
 
 void CPU::STA(const Instruction &instruction) {
   Word address = fetchAddress(instruction.mode);
-  write(address, registers_.A);
+  bus_->write(address, registers_.A);
 }
 
 void CPU::STX(const Instruction &instruction) {
   Word address = fetchAddress(instruction.mode);
-  write(address, registers_.X);
+  bus_->write(address, registers_.X);
 }
 
 void CPU::STY(const Instruction &instruction) {
   Word address = fetchAddress(instruction.mode);
-  write(address, registers_.Y);
+  bus_->write(address, registers_.Y);
 }
 
 // Transfer Operations
@@ -272,7 +272,7 @@ void CPU::TSX(const Instruction &instruction) {
 void CPU::TXS(const Instruction &instruction) { registers_.SP = registers_.X; }
 
 void CPU::PHA(const Instruction &instruction) {
-  write(0x100 + registers_.SP, registers_.A);
+  bus_->write(0x100 + registers_.SP, registers_.A);
   registers_.SP--;
 }
 
@@ -281,19 +281,19 @@ void CPU::PHP(const Instruction &instruction) {
                 (registers_.P.U << 5) | (registers_.P.B << 4) |
                 (registers_.P.D << 3) | (registers_.P.I << 2) |
                 (registers_.P.Z << 1) | registers_.P.C;
-  write(0x100 + registers_.SP, status);
+  bus_->write(0x100 + registers_.SP, status);
   registers_.SP--;
 }
 
 void CPU::PLA(const Instruction &instruction) {
   registers_.SP++;
-  registers_.A = read(0x100 + registers_.SP);
+  registers_.A = bus_->read(0x100 + registers_.SP);
   updateZeroAndNegativeFlags(registers_.A);
 }
 
 void CPU::PLP(const Instruction &instruction) {
   registers_.SP++;
-  Byte status = read(0x100 + registers_.SP);
+  Byte status = bus_->read(0x100 + registers_.SP);
   registers_.P.N = (status & 0x80) != 0;
   registers_.P.V = (status & 0x40) != 0;
   registers_.P.U = (status & 0x20) != 0;
@@ -380,9 +380,9 @@ void CPU::CPY(const Instruction &instruction) {
 // Increments/Decrements
 void CPU::INC(const Instruction &instruction) {
   Word address = fetchAddress(instruction.mode);
-  Byte value = read(address);
+  Byte value = bus_->read(address);
   value++;
-  write(address, value);
+  bus_->write(address, value);
   updateZeroAndNegativeFlags(value);
 }
 
@@ -398,9 +398,9 @@ void CPU::INY(const Instruction &instruction) {
 
 void CPU::DEC(const Instruction &instruction) {
   Word address = fetchAddress(instruction.mode);
-  Byte value = read(address);
+  Byte value = bus_->read(address);
   value--;
-  write(address, value);
+  bus_->write(address, value);
   updateZeroAndNegativeFlags(value);
 }
 
@@ -422,10 +422,10 @@ void CPU::ASL(const Instruction &instruction) {
     updateZeroAndNegativeFlags(registers_.A);
   } else {
     Word address = fetchAddress(instruction.mode);
-    Byte value = read(address);
+    Byte value = bus_->read(address);
     registers_.P.C = (value & 0x80) != 0;
     value <<= 1;
-    write(address, value);
+    bus_->write(address, value);
     updateZeroAndNegativeFlags(value);
   }
 }
@@ -437,10 +437,10 @@ void CPU::LSR(const Instruction &instruction) {
     updateZeroAndNegativeFlags(registers_.A);
   } else {
     Word address = fetchAddress(instruction.mode);
-    Byte value = read(address);
+    Byte value = bus_->read(address);
     registers_.P.C = (value & 0x01) != 0;
     value >>= 1;
-    write(address, value);
+    bus_->write(address, value);
     updateZeroAndNegativeFlags(value);
   }
 }
@@ -453,11 +453,11 @@ void CPU::ROL(const Instruction &instruction) {
     updateZeroAndNegativeFlags(registers_.A);
   } else {
     Word address = fetchAddress(instruction.mode);
-    Byte value = read(address);
+    Byte value = bus_->read(address);
     Byte oldCarry = registers_.P.C ? 1 : 0;
     registers_.P.C = (value & 0x80) != 0;
     value = (value << 1) | oldCarry;
-    write(address, value);
+    bus_->write(address, value);
     updateZeroAndNegativeFlags(value);
   }
 }
@@ -470,11 +470,11 @@ void CPU::ROR(const Instruction &instruction) {
     updateZeroAndNegativeFlags(registers_.A);
   } else {
     Word address = fetchAddress(instruction.mode);
-    Byte value = read(address);
+    Byte value = bus_->read(address);
     Byte oldCarry = registers_.P.C ? 0x80 : 0;
     registers_.P.C = (value & 0x01) != 0;
     value = (value >> 1) | oldCarry;
-    write(address, value);
+    bus_->write(address, value);
     updateZeroAndNegativeFlags(value);
   }
 }
@@ -487,18 +487,18 @@ void CPU::JMP(const Instruction &instruction) {
 
 void CPU::JSR(const Instruction &instruction) {
   registers_.PC--;
-  write(0x100 + registers_.SP, (registers_.PC >> 8) & 0xFF);
+  bus_->write(0x100 + registers_.SP, (registers_.PC >> 8) & 0xFF);
   registers_.SP--;
-  write(0x100 + registers_.SP, registers_.PC & 0xFF);
+  bus_->write(0x100 + registers_.SP, registers_.PC & 0xFF);
   registers_.SP--;
   registers_.PC = fetchAddress(AddressingMode::Absolute);
 }
 
 void CPU::RTS(const Instruction &instruction) {
   registers_.SP++;
-  Word low = read(0x100 + registers_.SP);
+  Word low = bus_->read(0x100 + registers_.SP);
   registers_.SP++;
-  Word high = read(0x100 + registers_.SP);
+  Word high = bus_->read(0x100 + registers_.SP);
   registers_.PC = (high << 8) | low;
   registers_.PC++;
 }
@@ -578,19 +578,19 @@ void CPU::SEI(const Instruction &instruction) { registers_.P.I = true; }
 // System Functions
 void CPU::BRK(const Instruction &instruction) {
   registers_.PC++;
-  write(0x100 + registers_.SP, (registers_.PC >> 8) & 0xFF);
+  bus_->write(0x100 + registers_.SP, (registers_.PC >> 8) & 0xFF);
   registers_.SP--;
-  write(0x100 + registers_.SP, registers_.PC & 0xFF);
+  bus_->write(0x100 + registers_.SP, registers_.PC & 0xFF);
   registers_.SP--;
 
   Byte status = (registers_.P.N << 7) | (registers_.P.V << 6) | (1 << 5) |
                 (1 << 4) | (registers_.P.D << 3) | (registers_.P.I << 2) |
                 (registers_.P.Z << 1) | registers_.P.C;
-  write(0x100 + registers_.SP, status);
+  bus_->write(0x100 + registers_.SP, status);
   registers_.SP--;
 
   registers_.P.I = true;
-  registers_.PC = read(0xFFFE) | (read(0xFFFF) << 8);
+  registers_.PC = bus_->read(0xFFFE) | (bus_->read(0xFFFF) << 8);
 }
 
 void CPU::NOP(const Instruction &instruction) {
@@ -599,7 +599,7 @@ void CPU::NOP(const Instruction &instruction) {
 
 void CPU::RTI(const Instruction &instruction) {
   registers_.SP++;
-  Byte status = read(0x100 + registers_.SP);
+  Byte status = bus_->read(0x100 + registers_.SP);
   registers_.P.N = (status & 0x80) != 0;
   registers_.P.V = (status & 0x40) != 0;
   registers_.P.U = (status & 0x20) != 0;
@@ -610,9 +610,9 @@ void CPU::RTI(const Instruction &instruction) {
   registers_.P.C = (status & 0x01) != 0;
 
   registers_.SP++;
-  Word low = read(0x100 + registers_.SP);
+  Word low = bus_->read(0x100 + registers_.SP);
   registers_.SP++;
-  Word high = read(0x100 + registers_.SP);
+  Word high = bus_->read(0x100 + registers_.SP);
   registers_.PC = (high << 8) | low;
 }
 
@@ -959,56 +959,56 @@ Byte CPU::fetchOperand(AddressingMode mode) {
     return 0;
 
   case AddressingMode::Immediate:
-    return read(registers_.PC++);
+    return bus_->read(registers_.PC++);
 
   case AddressingMode::ZeroPage:
-    return read(read(registers_.PC++));
+    return bus_->read(bus_->read(registers_.PC++));
 
   case AddressingMode::ZeroPageX:
-    return read((read(registers_.PC++) + registers_.X) & 0xFF);
+    return bus_->read((bus_->read(registers_.PC++) + registers_.X) & 0xFF);
 
   case AddressingMode::ZeroPageY:
-    return read((read(registers_.PC++) + registers_.Y) & 0xFF);
+    return bus_->read((bus_->read(registers_.PC++) + registers_.Y) & 0xFF);
 
   case AddressingMode::Relative:
     cycles_++; // branch succeeds
-    return read(registers_.PC++);
+    return bus_->read(registers_.PC++);
 
   case AddressingMode::Absolute: {
-    Word address = read(registers_.PC++) | (read(registers_.PC++) << 8);
-    return read(address);
+    Word address = bus_->read(registers_.PC++) | (bus_->read(registers_.PC++) << 8);
+    return bus_->read(address);
   }
 
   case AddressingMode::AbsoluteX: {
-    Word address = read(registers_.PC++) | (read(registers_.PC++) << 8);
+    Word address = bus_->read(registers_.PC++) | (bus_->read(registers_.PC++) << 8);
 
-    return read(address + registers_.X);
+    return bus_->read(address + registers_.X);
   }
 
   case AddressingMode::AbsoluteY: {
-    Word address = read(registers_.PC++) | (read(registers_.PC++) << 8);
-    return read(address + registers_.Y);
+    Word address = bus_->read(registers_.PC++) | (bus_->read(registers_.PC++) << 8);
+    return bus_->read(address + registers_.Y);
   }
 
   case AddressingMode::Indirect: {
-    Word pointer = read(registers_.PC++) | (read(registers_.PC++) << 8);
-    Word address = read(pointer) |
-                   (read((pointer & 0xFF00) | ((pointer + 1) & 0x00FF)) << 8);
-    return read(address);
+    Word pointer = bus_->read(registers_.PC++) | (bus_->read(registers_.PC++) << 8);
+    Word address = bus_->read(pointer) |
+                   (bus_->read((pointer & 0xFF00) | ((pointer + 1) & 0x00FF)) << 8);
+    return bus_->read(address);
   }
 
   case AddressingMode::IndexedIndirect: {
-    Byte zeroPageAddress = (read(registers_.PC++) + registers_.X) & 0xFF;
+    Byte zeroPageAddress = (bus_->read(registers_.PC++) + registers_.X) & 0xFF;
     Word address =
-        read(zeroPageAddress) | (read((zeroPageAddress + 1) & 0xFF) << 8);
-    return read(address);
+        bus_->read(zeroPageAddress) | (bus_->read((zeroPageAddress + 1) & 0xFF) << 8);
+    return bus_->read(address);
   }
 
   case AddressingMode::IndirectIndexed: {
-    Byte zeroPageAddress = read(registers_.PC++);
+    Byte zeroPageAddress = bus_->read(registers_.PC++);
     Word address =
-        read(zeroPageAddress) | (read((zeroPageAddress + 1) & 0xFF) << 8);
-    return read(address + registers_.Y);
+        bus_->read(zeroPageAddress) | (bus_->read((zeroPageAddress + 1) & 0xFF) << 8);
+    return bus_->read(address + registers_.Y);
   }
 
   default:
@@ -1024,52 +1024,52 @@ Word CPU::fetchAddress(AddressingMode mode) {
     return 0;
 
   case AddressingMode::ZeroPage:
-    return read(registers_.PC++);
+    return bus_->read(registers_.PC++);
 
   case AddressingMode::ZeroPageX:
-    return (read(registers_.PC++) + registers_.X) & 0xFF;
+    return (bus_->read(registers_.PC++) + registers_.X) & 0xFF;
 
   case AddressingMode::ZeroPageY:
-    return (read(registers_.PC++) + registers_.Y) & 0xFF;
+    return (bus_->read(registers_.PC++) + registers_.Y) & 0xFF;
 
   case AddressingMode::Relative: {
-    Byte offset = read(registers_.PC++);
+    Byte offset = bus_->read(registers_.PC++);
     // Convert to signed offset
     return registers_.PC + static_cast<int8_t>(offset);
   }
 
   case AddressingMode::Absolute:
-    return read(registers_.PC++) | (read(registers_.PC++) << 8);
+    return bus_->read(registers_.PC++) | (bus_->read(registers_.PC++) << 8);
 
   case AddressingMode::AbsoluteX: {
-    Word base = read(registers_.PC++) | (read(registers_.PC++) << 8);
+    Word base = bus_->read(registers_.PC++) | (bus_->read(registers_.PC++) << 8);
     return base + registers_.X;
   }
 
   case AddressingMode::AbsoluteY: {
-    Word base = read(registers_.PC++) | (read(registers_.PC++) << 8);
+    Word base = bus_->read(registers_.PC++) | (bus_->read(registers_.PC++) << 8);
     return base + registers_.Y;
   }
 
   case AddressingMode::Indirect: {
-    Word pointer = read(registers_.PC++) | (read(registers_.PC++) << 8);
+    Word pointer = bus_->read(registers_.PC++) | (bus_->read(registers_.PC++) << 8);
     // Simulate the 6502 bug with indirect jump
     if ((pointer & 0xFF) == 0xFF) {
-      return read(pointer) | (read(pointer & 0xFF00) << 8);
+      return bus_->read(pointer) | (bus_->read(pointer & 0xFF00) << 8);
     } else {
-      return read(pointer) | (read(pointer + 1) << 8);
+      return bus_->read(pointer) | (bus_->read(pointer + 1) << 8);
     }
   }
 
   case AddressingMode::IndexedIndirect: {
-    Byte zeroPageAddress = (read(registers_.PC++) + registers_.X) & 0xFF;
-    return read(zeroPageAddress) | (read((zeroPageAddress + 1) & 0xFF) << 8);
+    Byte zeroPageAddress = (bus_->read(registers_.PC++) + registers_.X) & 0xFF;
+    return bus_->read(zeroPageAddress) | (bus_->read((zeroPageAddress + 1) & 0xFF) << 8);
   }
 
   case AddressingMode::IndirectIndexed: {
-    Byte zeroPageAddress = read(registers_.PC++);
+    Byte zeroPageAddress = bus_->read(registers_.PC++);
     Word base =
-        read(zeroPageAddress) | (read((zeroPageAddress + 1) & 0xFF) << 8);
+        bus_->read(zeroPageAddress) | (bus_->read((zeroPageAddress + 1) & 0xFF) << 8);
     return base + registers_.Y;
   }
 
@@ -1088,13 +1088,13 @@ void CPU::handlePageCrossing(const Instruction &instruction) {
   Byte finalAddress{0};
   switch (instruction.mode) {
   case AddressingMode::AbsoluteX:
-    finalAddress = read(baseAddress + registers_.X);
+    finalAddress = bus_->read(baseAddress + registers_.X);
     break;
   case AddressingMode::AbsoluteY:
-    finalAddress = read(baseAddress + registers_.Y);
+    finalAddress = bus_->read(baseAddress + registers_.Y);
     break;
   case AddressingMode::IndirectIndexed:
-    finalAddress = read(baseAddress + registers_.Y);
+    finalAddress = bus_->read(baseAddress + registers_.Y);
   }
   if ((baseAddress & 0xFF00) != (finalAddress & 0xFF00)) {
     // Page boundary crossed, add an extra cycle

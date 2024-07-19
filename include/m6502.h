@@ -1,7 +1,9 @@
 #pragma once
 
+#include <bus.h>
 #include <chrono>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <unordered_map>
 
@@ -87,7 +89,7 @@ enum class Operation {
 
 class CPU {
 public:
-  CPU(double clockSpeedHz = 1789773) : clockSpeedHz_(clockSpeedHz){};
+  CPU(std::shared_ptr<Bus> bus, double clockSpeedHz = 1789773) : clockSpeedHz_(clockSpeedHz), bus_(bus){};
   ~CPU() = default;
 
   void reset();
@@ -97,8 +99,8 @@ public:
   AddressingMode detectAddressingMode(const std::string &instruction);
 
   // Memory Access
-  Byte read(Word address) const { return memory_[address]; }
-  void write(Word address, Byte value) { memory_[address] = value; }
+  // Byte read(Word address) const { return memory_[address]; }
+  // void write(Word address, Byte value) { memory_[address] = value; }
 
   // Cycle counting
   uint64_t cycles_;
@@ -127,8 +129,7 @@ public:
   std::unordered_map<Operation, std::vector<Instruction>> operationTable_;
 
 private:
-  static constexpr std::size_t MAX_MEMORY = 64 * 1024; // 64KB
-
+  std::shared_ptr<Bus> bus_; // Shared pointer to the Bus
   struct StatusFlags {
     bool C : 1; // Carry
     bool Z : 1; // Zero
@@ -158,9 +159,6 @@ private:
 
   // Registers
   Registers registers_;
-
-  //  Memory
-  std::array<Byte, MAX_MEMORY> memory_;
 
   // Combined operation functions
   void LDA(const Instruction &instruction);

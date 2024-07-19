@@ -1,6 +1,7 @@
 #pragma once
 #include <array>
 #include <cstdint>
+#include <vector>
 
 namespace nes {
 
@@ -20,6 +21,24 @@ public:
                  uint16_t endAddress);
   uint8_t read(uint16_t address);
   void write(uint16_t address, uint8_t data);
+};
+
+class RAM : public IBusDevice {
+private:
+    std::vector<uint8_t> data;
+public:
+    RAM(size_t size) : data(size, 0) {}
+    uint8_t read(uint16_t address) override { return data[address]; }
+    void write(uint16_t address, uint8_t value) override { data[address] = value; }
+};
+
+class ROM : public IBusDevice {
+private:
+    std::vector<uint8_t> data;
+public:
+    ROM(const std::vector<uint8_t>& romData) : data(romData) {}
+    uint8_t read(uint16_t address) override { return data[address]; }
+    void write(uint16_t address, uint8_t value) override { /* Ignore writes */ }
 };
 
 } // namespace nes
