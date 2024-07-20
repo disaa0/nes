@@ -1,4 +1,4 @@
-#include "bus.h"
+#include <bus.h>
 #include <cartrige.h>
 #include <emulator.h>
 #include <iostream>
@@ -12,7 +12,7 @@ void Emulator::run(const uint64_t targetCycles) {
   cpu_->reset();
   
   try {
-    cartridge_.loadROM("nestest.nes");
+    cartridge_->loadROM("nestest.nes");
   } catch (const std::exception &e) {
     std::cerr << "Error loading ROM: " << e.what() << std::endl;
   }
@@ -39,6 +39,11 @@ void Emulator::synchronizeWithRealTime() {
 }
 
 void Emulator::mapDevices() {
-  RAM ram = RAM(0x800);
+  RAM ram = RAM(0x0800);
+  PPU ppu = PPU(0x0008);
+  chrROM chr = chrROM(cartridge_, cartridge_->chrROM);
+  chrROM prg = chrROM(cartridge_, cartridge_->prgROM);
   bus_->mapDevice(&ram, 0x0000, 0x07FF);
+  bus_->mapDevice(&ppu, 0x2000, 0x3FFF);
+  bus_->mapDevice(&chr, 0x, 0x);
 }

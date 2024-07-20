@@ -1,5 +1,4 @@
 #pragma once
-#include <bus.h>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -18,16 +17,16 @@ public:
 
 class Cartridge {
 public:
-  Cartridge(std::shared_ptr<Bus> bus) : bus_(bus) {};
+  Cartridge() {};
   ~Cartridge() = default;
   void loadROM(const std::string &filename);
-
-private:
-  std::shared_ptr<Bus> bus_;
+  std::unique_ptr<Mapper> mapper;
   std::vector<uint8_t> prgROM;
   std::vector<uint8_t> chrROM;
   std::vector<uint8_t> sram;
-  std::unique_ptr<Mapper> mapper;
+
+private:
+  
   uint8_t mapperNumber;
   bool hasTrainer;
 

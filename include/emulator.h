@@ -20,10 +20,11 @@ private:
 
   std::shared_ptr<nes::CPU> cpu_ =
       std::make_shared<nes::CPU>(bus_); // Shared pointer to the Bus
-    
-  nes::Debugger debugger_ = nes::Debugger(cpu_);
 
-  nes::Cartridge cartridge_;
+  std::shared_ptr<nes::Cartridge> cartridge_ =
+      std::make_shared<nes::Cartridge>(); // Shared pointer to the Cartridge
+
+  nes::Debugger debugger_ = nes::Debugger(cpu_);
 
   static constexpr uint64_t CYCLES_PER_FRAME = 29780;
   void synchronizeWithRealTime();
