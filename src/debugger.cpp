@@ -132,7 +132,7 @@ std::string Debugger::wordToHex(uint16_t word) {
   return ss.str();
 }
 
-std::vector<std::string> Debugger::disassemble(const std::vector<uint8_t> &code) {
+std::vector<std::string> Debugger::disassemble(const std::vector<uint8_t> &code, CPU *cpu) {
   std::vector<std::string> disassembled_code;
   uint16_t pc = 0;
   std::string current_section;
@@ -171,8 +171,8 @@ std::vector<std::string> Debugger::disassemble(const std::vector<uint8_t> &code)
     }
 
     uint8_t opcode = code[pc++];
-    auto it = cpu_->opcodeTable_.find(opcode);
-    if (it == cpu_->opcodeTable_.end()) {
+    auto it = cpu->opcodeTable_.find(opcode);
+    if (it == cpu->opcodeTable_.end()) {
       throw std::runtime_error("Unknown opcode: " + std::to_string(opcode));
     }
 
@@ -331,7 +331,7 @@ bool Debugger::isLabel(const std::string &operand) {
                      [](char c) { return std::isalnum(c) || c == '_'; });
 }
 
-std::vector<uint8_t> Debugger::assemble(const std::vector<std::string> &code) {
+std::vector<uint8_t> Debugger::assemble(const std::vector<std::string> &code, CPU *cpu) {
   std::vector<uint8_t> binary;
   std::unordered_map<std::string, uint16_t> labels;
   std::vector<std::pair<size_t, std::string>> unresolved_labels;
@@ -369,8 +369,8 @@ std::vector<uint8_t> Debugger::assemble(const std::vector<std::string> &code) {
 
     // Handle instructions
     Operation op = stringToMnemonic(token);
-    auto it = cpu_->operationTable_.find(op);
-    if (it == cpu_->operationTable_.end()) {
+    auto it = cpu->operationTable_.find(op);
+    if (it == cpu->operationTable_.end()) {
       throw std::runtime_error("Unknown mnemonic: " + token);
     }
 

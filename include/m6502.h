@@ -12,7 +12,7 @@ using Byte = std::uint8_t;
 using Word = std::uint16_t;
 using Address = std::uint16_t;
 
-enum class AddressingMode {
+enum AddressingMode {
   Implied,
   Accumulator,
   Immediate,
@@ -89,7 +89,7 @@ enum class Operation {
 
 class CPU {
 public:
-  CPU(std::shared_ptr<Bus> bus, double clockSpeedHz = 1789773) : clockSpeedHz_(clockSpeedHz), bus_(bus){};
+  CPU(Bus *b, double clockSpeedHz = 1789773) : clockSpeedHz_(clockSpeedHz), bus(b){};
   ~CPU() = default;
 
   void reset();
@@ -97,10 +97,6 @@ public:
   // template <typename T>
   void run(uint64_t targetCycles);
   AddressingMode detectAddressingMode(const std::string &instruction);
-
-  // Memory Access
-  // Byte read(Word address) const { return memory_[address]; }
-  // void write(Word address, Byte value) { memory_[address] = value; }
 
   // Cycle counting
   uint64_t cycles_;
@@ -129,7 +125,7 @@ public:
   std::unordered_map<Operation, std::vector<Instruction>> operationTable_;
 
 private:
-  std::shared_ptr<Bus> bus_; // Shared pointer to the Bus
+  std::shared_ptr<Bus> bus; // Shared pointer to the Bus
   struct StatusFlags {
     bool C : 1; // Carry
     bool Z : 1; // Zero

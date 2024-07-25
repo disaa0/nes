@@ -3,8 +3,8 @@
 #include <memory>
 #include <string>
 #include <vector>
-
 namespace nes {
+
 class Mapper {
 public:
   virtual ~Mapper() = default;
@@ -15,18 +15,20 @@ public:
   virtual void writeCHR(uint16_t address, uint8_t value) = 0;
 };
 
+class Bus;
 class Cartridge {
 public:
-  Cartridge() {};
+  Cartridge(){};
   ~Cartridge() = default;
   void loadROM(const std::string &filename);
+
   std::unique_ptr<Mapper> mapper;
+
   std::vector<uint8_t> prgROM;
   std::vector<uint8_t> chrROM;
   std::vector<uint8_t> sram;
 
 private:
-  
   uint8_t mapperNumber;
   bool hasTrainer;
 

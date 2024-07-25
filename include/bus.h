@@ -1,6 +1,6 @@
 #pragma once
+#include <cartridge.h>
 #include <array>
-#include <cartrige.h>
 #include <cstdint>
 #include <vector>
 
@@ -18,10 +18,12 @@ private:
   std::array<IBusDevice *, 65536> memoryMap;
 
 public:
-  void mapDevice(IBusDevice *device, uint16_t startAddress,
+  void cpu_map_device(IBusDevice *device, uint16_t startAddress,
                  uint16_t endAddress);
-  uint8_t read(uint16_t address);
-  void write(uint16_t address, uint8_t data);
+  void ppu_map_device(IBusDevice *device, uint16_t startAddress,
+                 uint16_t endAddress);
+  uint8_t cpu_read(uint16_t address);
+  void cpu_write(uint16_t address, uint8_t data);
 };
 
 class RAM : public IBusDevice {
@@ -51,36 +53,32 @@ public:
   }
 };
 
-class prgROM : public IBusDevice {
+
+
+class pgrROM : public IBusDevice {
 private:
-  std::shared_ptr<Cartridge> cartridge_;
-  std::vector<uint8_t> data;
-
+  Cartridge *cartridge;
 public:
-  prgROM(std::shared_ptr<Cartridge> cartridge,
-         const std::vector<uint8_t> &romData)
-      : cartridge_(cartridge), data(romData) {}
-  uint8_t read(uint16_t address) override {
-    return cartridge_->mapper->readPRG(address);
+  pgrROM(Cartridge *cart) : cartridge(cart) {}
+  uint8_t read(uint16_t address) {
+    return cartridge->mapper->readPRG(address);
   };
-  void write (uint16_t address, uint8_t value) override {
-    return cartridge_->mapper->writePRG(address, value);
-  };};
+  void write(uint16_t address, uint8_t value) {
+    return cartridge->mapper->writePRG(address, value);
+  };
+};
 
-class chrROM : public IBusDevice {
+class chrROM : public IBusDevice{
 private:
-  std::shared_ptr<Cartridge> cartridge_;
-  std::vector<uint8_t> data;
-
+   Cartridge *cartridge;
 public:
-  chrROM(std::shared_ptr<Cartridge> cartridge,
-         const std::vector<uint8_t> &romData)
-      : cartridge_(cartridge), data(romData) {}
-  uint8_t read(uint16_t address) override {
-    return cartridge_->mapper->readCHR(address);
+  chrROM(Cartridge *cart) : cartridge(cart) {}
+
+  uint8_t read(uint16_t address) {
+    return cartridge->mapper->readCHR(address);
   };
-  void write (uint16_t address, uint8_t value) override {
-    return cartridge_->mapper->writeCHR(address, value);
+  void write(uint16_t address, uint8_t value) {
+    return cartridge->mapper->writeCHR(address, value);
   };
 };
 

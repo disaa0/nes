@@ -1,12 +1,13 @@
 #include <bus.h>
-#include <cartrige.h>
+#include <cartridge.h>
 #include <cstring>
 #include <fstream>
 #include <iostream>
 
 using namespace nes;
-
+// https://www.nesdev.org/wiki/INES
 void Cartridge::loadROM(const std::string &filename) {
+
   std::ifstream file(filename, std::ios::binary);
   if (!file) {
     throw std::runtime_error("Could not open ROM file");
@@ -38,6 +39,7 @@ void Cartridge::loadROM(const std::string &filename) {
   // Read PRG-ROM
   prgROM.resize(prgROMSize);
   file.read(reinterpret_cast<char *>(prgROM.data()), prgROMSize);
+  file.read(reinterpret_cast<char *>(prgROM.data()), prgROMSize);
 
   // Read CHR-ROM
   if (chrROMSize > 0) {
@@ -60,28 +62,8 @@ void Cartridge::loadROM(const std::string &filename) {
   std::cout << "Mapper: " << static_cast<int>(mapperNumber) << std::endl;
   std::cout << "PRG-ROM size: " << prgROM.size() << " bytes" << std::endl;
   std::cout << "CHR-ROM size: " << chrROM.size() << " bytes" << std::endl;
+
 }
-
-// void Cartridge::loadROM(const std::string &filename) {
-//   std::ifstream file(filename,
-//                      std::ios::binary); // Open the binary file
-
-//   if (!file.is_open()) {
-//     std::cerr << "Error opening file." << std::endl;
-//     return;
-//   }
-
-//   // Determine the file size
-//   file.seekg(0, std::ios::end);
-//   std::streamsize fileSize = file.tellg();
-//   file.seekg(0, std::ios::beg); // Reset file pointer to the beginning
-
-//   file.read(reinterpret_cast<char *>(romData.data()), fileSize);
-//   file.close();
-
-//   // Now 'data' contains the binary data from the file
-//   std::cout << "File size: " << fileSize << std::endl;
-// }
 
 class NROMMapper : public Mapper {
 private:
