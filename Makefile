@@ -7,12 +7,12 @@
 CXX = g++
 
 # define any compile-time flags
-CXXFLAGS	:= -std=c++20 -Wall -Wextra -g -pedantic-errors -Weffc++ -Wconversion -Wsign-conversion -Wshadow
+CXXFLAGS	:= -std=c++20 -Wall -Wextra -g -pedantic-errors -Weffc++ -Wconversion -Wsign-conversion -Wshadow  $(shell sdl2-config --cflags)
 
 # define library paths in addition to /usr/lib
 #   if I wanted to include libraries not in /usr/lib I'd specify
 #   their path using -Lpath, something like:
-LFLAGS =
+LFLAGS = $(shell sdl2-config --libs)
 
 # define output directory
 OUTPUT	:= output

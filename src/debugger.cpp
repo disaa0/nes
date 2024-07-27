@@ -116,6 +116,44 @@ std::string Debugger::mnemonicToString(Operation mnemonic) {
     return "TXS";
   case Operation::TYA:
     return "TYA";
+  case Operation::SLO:
+    return "SLO";
+  case Operation::RLA:
+    return "RLA";
+  case Operation::SRE:
+    return "SRE";
+  case Operation::RRA:
+    return "RRA";
+  case Operation::SAX:
+    return "SAX";
+  case Operation::LAX:
+    return "LAX";
+  case Operation::DCP:
+    return "DCP";
+  case Operation::ISC:
+    return "ISC";
+  case Operation::ANC:
+    return "ANC";
+  case Operation::ALR:
+    return "ALR";
+  case Operation::ARR:
+    return "ARR";
+  case Operation::XAA:
+    return "XAA";
+  case Operation::AXS:
+    return "AXS";
+  case Operation::AHX:
+    return "AHX";
+  case Operation::SHY:
+    return "SHY";
+  case Operation::SHX:
+    return "SHX";
+  case Operation::TAS:
+    return "TAS";
+  case Operation::LAS:
+    return "LAS";
+  case Operation::KIL:
+    return "KIL";
   default:
     throw std::runtime_error("Unknown Operation");
   }
@@ -132,7 +170,8 @@ std::string Debugger::wordToHex(uint16_t word) {
   return ss.str();
 }
 
-std::vector<std::string> Debugger::disassemble(const std::vector<uint8_t> &code, CPU *cpu) {
+std::vector<std::string> Debugger::disassemble(const std::vector<uint8_t> &code,
+                                               CPU *cpu) {
   std::vector<std::string> disassembled_code;
   uint16_t pc = 0;
   std::string current_section;
@@ -142,33 +181,33 @@ std::vector<std::string> Debugger::disassemble(const std::vector<uint8_t> &code,
     // line << std::setfill('0') << std::setw(4) << std::hex << pc << "  ";
 
     // Check for comments or section markers
-    if (code[pc] == 0xFF) {
-      pc++;
-      if (pc < code.size() && code[pc] == 0xFF) {
-        // Section marker
-        pc++;
-        current_section = "";
-        while (pc < code.size() && code[pc] != 0x00) {
-          current_section += static_cast<char>(code[pc]);
-          pc++;
-        }
-        pc++; // Skip the null terminator
-        line << "; Section: " << current_section;
-        disassembled_code.push_back(line.str());
-        continue;
-      } else {
-        // Comment
-        std::string comment;
-        while (pc < code.size() && code[pc] != 0x00) {
-          comment += static_cast<char>(code[pc]);
-          pc++;
-        }
-        pc++; // Skip the null terminator
-        line << "; " << comment;
-        disassembled_code.push_back(line.str());
-        continue;
-      }
-    }
+    // if (code[pc] == 0xFF) {
+    //   pc++;
+    //   if (pc < code.size() && code[pc] == 0xFF) {
+    //     // Section marker
+    //     pc++;
+    //     current_section = "";
+    //     while (pc < code.size() && code[pc] != 0x00) {
+    //       current_section += static_cast<char>(code[pc]);
+    //       pc++;
+    //     }
+    //     pc++; // Skip the null terminator
+    //     line << "; Section: " << current_section;
+    //     disassembled_code.push_back(line.str());
+    //     continue;
+    //   } else {
+    //     // Comment
+    //     std::string comment;
+    //     while (pc < code.size() && code[pc] != 0x00) {
+    //       comment += static_cast<char>(code[pc]);
+    //       pc++;
+    //     }
+    //     pc++; // Skip the null terminator
+    //     line << "; " << comment;
+    //     disassembled_code.push_back(line.str());
+    //     continue;
+    //   }
+    // }
 
     uint8_t opcode = code[pc++];
     auto it = cpu->opcodeTable_.find(opcode);
@@ -262,7 +301,14 @@ Operation Debugger::stringToMnemonic(const std::string &str) {
       {"SED", Operation::SED}, {"SEI", Operation::SEI}, {"STA", Operation::STA},
       {"STX", Operation::STX}, {"STY", Operation::STY}, {"TAX", Operation::TAX},
       {"TAY", Operation::TAY}, {"TSX", Operation::TSX}, {"TXA", Operation::TXA},
-      {"TXS", Operation::TXS}, {"TYA", Operation::TYA}};
+      {"TXS", Operation::TXS}, {"TYA", Operation::TYA}, {"TYA", Operation::TYA},
+      {"SLO", Operation::SLO}, {"RLA", Operation::RLA}, {"SRE", Operation::SRE},
+      {"RRA", Operation::RRA}, {"SAX", Operation::SAX}, {"LAX", Operation::LAX},
+      {"DCP", Operation::DCP}, {"ISC", Operation::ISC}, {"ANC", Operation::ANC},
+      {"ALR", Operation::ALR}, {"ARR", Operation::ARR}, {"XAA", Operation::XAA},
+      {"AXS", Operation::AXS}, {"AHX", Operation::AHX}, {"SHY", Operation::SHY},
+      {"SHX", Operation::SHX}, {"TAS", Operation::TAS}, {"LAS", Operation::LAS},
+      {"KIL", Operation::KIL}};
 
   auto it = mnemonicMap.find(str);
   if (it != mnemonicMap.end()) {
@@ -271,7 +317,8 @@ Operation Debugger::stringToMnemonic(const std::string &str) {
   throw std::runtime_error("Unknown mnemonic: " + str);
 }
 
-bool Debugger::matchAddressingMode(const std::string &operand, AddressingMode mode) {
+bool Debugger::matchAddressingMode(const std::string &operand,
+                                   AddressingMode mode) {
   switch (mode) {
   case AddressingMode::Implied:
   case AddressingMode::Accumulator:
@@ -312,7 +359,8 @@ bool Debugger::matchAddressingMode(const std::string &operand, AddressingMode mo
   }
 }
 
-uint16_t Debugger::parseOperand(const std::string &operand, AddressingMode mode) {
+uint16_t Debugger::parseOperand(const std::string &operand,
+                                AddressingMode mode) {
   std::string value = operand;
   if (mode == AddressingMode::Immediate) {
     value = value.substr(1);
@@ -331,7 +379,8 @@ bool Debugger::isLabel(const std::string &operand) {
                      [](char c) { return std::isalnum(c) || c == '_'; });
 }
 
-std::vector<uint8_t> Debugger::assemble(const std::vector<std::string> &code, CPU *cpu) {
+std::vector<uint8_t> Debugger::assemble(const std::vector<std::string> &code,
+                                        CPU *cpu) {
   std::vector<uint8_t> binary;
   std::unordered_map<std::string, uint16_t> labels;
   std::vector<std::pair<size_t, std::string>> unresolved_labels;

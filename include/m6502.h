@@ -6,11 +6,9 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace nes {
-using Byte = std::uint8_t;
-using Word = std::uint16_t;
-using Address = std::uint16_t;
 
 enum AddressingMode {
   Implied,
@@ -28,7 +26,7 @@ enum AddressingMode {
   IndirectIndexed
 };
 
-enum class Operation {
+enum Operation {
   ADC,
   AND,
   ASL,
@@ -69,8 +67,8 @@ enum class Operation {
   PLA,
   PLP,
   ROL,
-  ROR,
   RTI,
+  ROR,
   RTS,
   SBC,
   SEC,
@@ -84,25 +82,35 @@ enum class Operation {
   TSX,
   TXA,
   TXS,
-  TYA
+  TYA,
+  SLO,
+  RLA,
+  SRE,
+  RRA,
+  SAX,
+  LAX,
+  DCP,
+  ISC,
+  ANC,
+  ALR,
+  ARR,
+  XAA,
+  AXS,
+  AHX,
+  SHY,
+  SHX,
+  TAS,
+  LAS,
+  KIL
 };
 
 class CPU {
 public:
-  CPU(Bus *b, double clockSpeedHz = 1789773) : clockSpeedHz_(clockSpeedHz), bus(b){};
+  CPU(Bus *b, double clockSpeedHz = 1789773)
+      : clockSpeedHz_(clockSpeedHz), bus(b){};
   ~CPU() = default;
 
-  void reset();
-  void step();
-  // template <typename T>
-  void run(uint64_t targetCycles);
-  AddressingMode detectAddressingMode(const std::string &instruction);
-
-  // Cycle counting
-  uint64_t cycles_;
-  double clockSpeedHz_;
-  std::chrono::high_resolution_clock::time_point lastCycleTime_;
-
+  // Types
   // Instruction control
   struct Instruction {
     Byte opcode;
@@ -119,6 +127,17 @@ public:
         : opcode(0), mnemonic(), cycles(0), mode(AddressingMode::Implied),
           needsExtraCycle(false) {}
   };
+
+  // Functions
+  void reset();
+  uint64_t step();
+  AddressingMode detectAddressingMode(const std::string &instruction);
+  std::vector<uint8_t> get_next_operation();
+
+  // Cycle counting
+  uint64_t cycles_; // cycles each step took
+  double clockSpeedHz_;
+  std::chrono::high_resolution_clock::time_point lastCycleTime_;
 
   // Helper Tables
   std::unordered_map<Byte, Instruction> opcodeTable_;
@@ -154,7 +173,7 @@ private:
   };
 
   // Registers
-  Registers registers_;
+  Registers registers;
 
   // Combined operation functions
   void LDA(const Instruction &instruction);
@@ -213,14 +232,33 @@ private:
   void TXA(const Instruction &instruction);
   void TXS(const Instruction &instruction);
   void TYA(const Instruction &instruction);
+  void SLO(const Instruction &instruction);
+  void RLA(const Instruction &instruction);
+  void SRE(const Instruction &instruction);
+  void RRA(const Instruction &instruction);
+  void SAX(const Instruction &instruction);
+  void LAX(const Instruction &instruction);
+  void DCP(const Instruction &instruction);
+  void ISC(const Instruction &instruction);
+  void ANC(const Instruction &instruction);
+  void ALR(const Instruction &instruction);
+  void ARR(const Instruction &instruction);
+  void XAA(const Instruction &instruction);
+  void AXS(const Instruction &instruction);
+  void AHX(const Instruction &instruction);
+  void SHY(const Instruction &instruction);
+  void SHX(const Instruction &instruction);
+  void TAS(const Instruction &instruction);
+  void LAS(const Instruction &instruction);
+  void KIL(const Instruction &instruction);
 
   void initializeTables();
 
   // Operations
-  Byte fetchOperand(AddressingMode mode);
-  Word fetchAddress(AddressingMode mode);
+  Byte fetchOperand(AddressingMode mode, bool read_only = false);
+  Word fetchAddress(AddressingMode mode, bool read_only = false);
   void updateZeroAndNegativeFlags(Byte value);
   void handlePageCrossing(const Instruction &instruction);
 };
 
-} // namespace m6502
+} // namespace nes

@@ -3,6 +3,7 @@
 #include <cartridge.h>
 #include <debugger.h>
 #include <m6502.h>
+#include <ppu.h>
 
 namespace nes {
 

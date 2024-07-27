@@ -23,8 +23,8 @@ void Cartridge::loadROM(const std::string &filename) {
   }
 
   // Parse header
-  uint8_t prgROMSize = header[4] * 16 * 1024; // 16KB units
-  uint8_t chrROMSize = header[5] * 8 * 1024;  // 8KB units
+  uint16_t prgROMSize = header[4] * 16 * 1024; // 16KB units
+  uint16_t chrROMSize = header[5] * 8 * 1024;  // 8KB units
   uint8_t flags6 = header[6];
   uint8_t flags7 = header[7];
 
@@ -38,7 +38,6 @@ void Cartridge::loadROM(const std::string &filename) {
 
   // Read PRG-ROM
   prgROM.resize(prgROMSize);
-  file.read(reinterpret_cast<char *>(prgROM.data()), prgROMSize);
   file.read(reinterpret_cast<char *>(prgROM.data()), prgROMSize);
 
   // Read CHR-ROM

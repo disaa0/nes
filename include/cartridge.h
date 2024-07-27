@@ -15,7 +15,6 @@ public:
   virtual void writeCHR(uint16_t address, uint8_t value) = 0;
 };
 
-class Bus;
 class Cartridge {
 public:
   Cartridge(){};
